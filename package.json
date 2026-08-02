@@ -7,8 +7,16 @@
     "claude-voice": "./src/cli.ts"
   },
   "scripts": {
-    "dispatch": "node src/dispatch.ts",
-    "typecheck": "tsc --noEmit"
+    "init": "node src/cli.ts init",
+    "hooks:install": "node src/cli.ts install",
+    "hooks:uninstall": "node src/cli.ts uninstall",
+    "list": "node src/cli.ts list",
+    "voices": "node src/cli.ts voices",
+    "config": "node src/cli.ts config",
+    "say": "node src/cli.ts test",
+    "test": "node test/verify.mjs",
+    "typecheck": "tsc --noEmit",
+    "check": "npm run typecheck && npm run test"
   },
   "engines": {
     "node": ">=23.6"
