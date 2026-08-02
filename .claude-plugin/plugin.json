@@ -1,0 +1,7 @@
+{
+  "name": "claude-voice",
+  "version": "0.0.1",
+  "description": "Give Claude Code a voice — selective, tasteful spoken summaries and attention cues. Quiet by default.",
+  "author": "amouzou",
+  "hooks": "./hooks/hooks.json"
+}

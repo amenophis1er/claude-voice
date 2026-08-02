@@ -1,0 +1,22 @@
+{
+  "name": "claude-voice",
+  "version": "0.0.1",
+  "description": "Give Claude Code a voice — selective, tasteful spoken summaries and attention cues. Quiet by default.",
+  "type": "module",
+  "bin": {
+    "claude-voice": "./src/cli.ts"
+  },
+  "scripts": {
+    "dispatch": "node src/dispatch.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "engines": {
+    "node": ">=23.6"
+  },
+  "keywords": ["claude-code", "tts", "voice", "hooks", "plugin"],
+  "license": "MIT",
+  "devDependencies": {
+    "typescript": "^5.7.0",
+    "@types/node": "^22.0.0"
+  }
+}
