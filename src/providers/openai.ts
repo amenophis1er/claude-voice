@@ -30,6 +30,7 @@ export const openAiProvider: TtsProvider = {
         response_format: "mp3",
         speed: input.rate ?? 1,
       }),
+      signal: AbortSignal.timeout(15_000),
     });
     if (!res.ok) {
       throw new Error(`OpenAI TTS ${res.status}: ${await res.text()}`);

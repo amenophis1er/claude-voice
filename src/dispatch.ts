@@ -1,75 +1,84 @@
 #!/usr/bin/env node
-import { readFileSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { readFileSync } from "node:fs";
 import { loadConfig, policyFor, type VoiceConfig } from "./config.ts";
-import { chime, interrupt, speak } from "./speak.ts";
-import { extractVoiceMarker, sanitizeForSpeech, clampSpokenLength } from "./sanitize.ts";
+import { mutedByFocus } from "./focus.ts";
+import {
+  detachChime,
+  detachSpeak,
+  interrupt,
+  logDebug,
+  markSpoken,
+  throttled,
+} from "./speak.ts";
+import { clampSpokenLength, extractVoiceMarker, sanitizeForSpeech } from "./sanitize.ts";
 import { readLastTurn } from "./transcript.ts";
 
 /**
- * Single entry point for every hook. Usage:
- *   node dispatch.ts <event>
- * where <event> is one of: stop | notification | prompt-submit | instructions
+ * Single entry point for every hook. Usage: `node dispatch.ts <event>`
+ * where <event> is: stop | notification | prompt-submit | instructions
  * The hook's JSON payload arrives on stdin.
  */
-const THROTTLE_FILE = join(tmpdir(), "claude-voice-last-spoken");
-
 const INSTRUCTION = [
   "[claude-voice] When you finish a substantial task, end your final message with a",
-  "one-sentence spoken summary wrapped in ⟨voice⟩...⟨/voice⟩ — natural, conversational,",
-  "no code or file paths (it will be read aloud). Omit it for trivial replies.",
+  "one-sentence spoken summary as an HTML comment: <!--voice: your summary here-->.",
+  "Make it natural and conversational with no code, paths, or URLs (it is read aloud),",
+  "and it stays hidden from the user in the rendered chat. Omit it for trivial replies.",
 ].join(" ");
 
 async function main() {
   const event = process.argv[2];
-  const payload = readStdinJson();
+  const p = readStdinJson();
   const cfg = loadConfig();
   const policy = policyFor(cfg.preset);
+  const session = typeof p.session_id === "string" ? p.session_id : "default";
 
   switch (event) {
     case "instructions":
-      // Wired to SessionStart: inject the marker convention into context.
-      emitAdditionalContext(INSTRUCTION);
+      emitAdditionalContext(INSTRUCTION); // SessionStart (synchronous)
       return;
 
     case "prompt-submit":
-      interrupt(); // new prompt → cut any in-flight audio
+      interrupt(session); // new prompt → cut any in-flight audio
       return;
 
     case "notification": {
-      if (inQuietHours(cfg)) return;
-      if (policy.chimeOnNotification) await chime("attention");
+      if (silenced(cfg)) return;
+      if (policy.chimeOnNotification) detachChime(session, "attention");
       if (policy.speakNotification) {
-        const msg = typeof payload?.message === "string" ? payload.message : "Claude needs your input.";
-        await speak(clampSpokenLength(sanitizeForSpeech(msg), 120), cfg);
+        detachSpeak(session, notificationPhrase(p.notification_type, p.message), cfg);
       }
       return;
     }
 
     case "stop": {
-      if (inQuietHours(cfg)) return;
-      if (policy.chimeOnStop) await chime("done");
+      if (silenced(cfg)) return;
+      if (policy.chimeOnStop) detachChime(session, "done");
       if (!policy.speakSummary) return;
 
-      const turn = payload?.transcript_path ? readLastTurn(payload.transcript_path) : undefined;
-      if (!turn) return;
+      const text: string =
+        typeof p.last_assistant_message === "string" ? p.last_assistant_message : "";
+      const marker = extractVoiceMarker(text);
 
-      const marker = extractVoiceMarker(turn.lastAssistantText);
-      const substantial =
-        turn.toolCalls >= cfg.substantial.minToolCalls ||
-        turn.durationSeconds >= cfg.substantial.minDurationSeconds;
+      // Best-effort "was this substantial?" — never required for correctness.
+      const stats = typeof p.transcript_path === "string" ? readLastTurn(p.transcript_path) : undefined;
+      const substantial = stats
+        ? stats.toolCalls >= cfg.substantial.minToolCalls ||
+          stats.durationSeconds >= cfg.substantial.minDurationSeconds
+        : false;
 
-      // Speak only if: there's a marker, or preset says always, or it was substantial.
-      if (!marker && !policy.speakAlways && !substantial) return;
-      if (throttled(cfg)) return;
+      if (!marker && !policy.speakAlways && !substantial) {
+        logDebug("stop: skipped (no marker, not substantial)");
+        return;
+      }
+      if (throttled(session, cfg.throttleSeconds)) {
+        logDebug("stop: skipped (throttled)");
+        return;
+      }
 
-      const text =
-        marker ??
-        clampSpokenLength(sanitizeForSpeech(turn.lastAssistantText));
-      if (!text) return;
-      markSpoken();
-      await speak(text, cfg);
+      const spoken = marker ?? clampSpokenLength(sanitizeForSpeech(text));
+      if (!spoken) return;
+      markSpoken(session);
+      detachSpeak(session, spoken, cfg);
       return;
     }
 
@@ -78,7 +87,38 @@ async function main() {
   }
 }
 
-function readStdinJson(): any {
+/** Quiet-hours + focus muting, shared by stop/notification. */
+function silenced(cfg: VoiceConfig): boolean {
+  if (inQuietHours(cfg)) {
+    logDebug("silenced: quiet hours");
+    return true;
+  }
+  if (mutedByFocus(cfg)) {
+    logDebug("silenced: terminal focused");
+    return true;
+  }
+  return false;
+}
+
+/** Tailor the spoken phrase to the notification type when we recognize it. */
+function notificationPhrase(type: unknown, message: unknown): string {
+  switch (type) {
+    case "permission_prompt":
+      return "Claude needs your permission.";
+    case "idle_prompt":
+      return "Claude is waiting for you.";
+    case "agent_needs_input":
+      return "Claude needs your input.";
+    case "agent_completed":
+      return "Task complete.";
+    default:
+      return typeof message === "string" && message.trim()
+        ? clampSpokenLength(sanitizeForSpeech(message), 120)
+        : "Claude needs your attention.";
+  }
+}
+
+function readStdinJson(): Record<string, unknown> {
   try {
     return JSON.parse(readFileSync(0, "utf8"));
   } catch {
@@ -88,20 +128,10 @@ function readStdinJson(): any {
 
 function emitAdditionalContext(text: string): void {
   process.stdout.write(
-    JSON.stringify({ hookSpecificOutput: { hookEventName: "SessionStart", additionalContext: text } }),
+    JSON.stringify({
+      hookSpecificOutput: { hookEventName: "SessionStart", additionalContext: text },
+    }),
   );
-}
-
-function throttled(cfg: VoiceConfig): boolean {
-  try {
-    const last = Number(readFileSync(THROTTLE_FILE, "utf8"));
-    return Date.now() - last < cfg.throttleSeconds * 1000;
-  } catch {
-    return false;
-  }
-}
-function markSpoken(): void {
-  writeFileSync(THROTTLE_FILE, String(Date.now()));
 }
 
 function inQuietHours(cfg: VoiceConfig): boolean {

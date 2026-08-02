@@ -31,6 +31,7 @@ export const elevenLabsProvider: TtsProvider = {
           accept: "audio/mpeg",
         },
         body: JSON.stringify({ text: input.text, model_id: model }),
+        signal: AbortSignal.timeout(15_000),
       },
     );
     if (!res.ok) {

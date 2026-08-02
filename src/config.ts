@@ -18,15 +18,18 @@ export interface VoiceConfig {
   substantial: { minToolCalls: number; minDurationSeconds: number };
   /** Optional quiet hours in 24h local time, e.g. { start: 22, end: 8 }. */
   quietHours?: { start: number; end: number };
+  /** Only speak/chime when the terminal is NOT the focused app (macOS only). */
+  speakOnlyWhenUnfocused: boolean;
 }
 
 const DEFAULTS: VoiceConfig = {
   preset: "summary",
-  provider: "say",
+  provider: "system",
   rate: 1,
   options: {},
   throttleSeconds: 20,
   substantial: { minToolCalls: 3, minDurationSeconds: 15 },
+  speakOnlyWhenUnfocused: false,
 };
 
 export const CONFIG_PATH = join(homedir(), ".claude", "voice", "config.json");

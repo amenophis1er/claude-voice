@@ -1,10 +1,17 @@
-/** Marker Claude emits to author a voice-native, one-line spoken summary. */
-const VOICE_MARKER = /⟨voice⟩([\s\S]*?)⟨\/voice⟩/;
+/**
+ * Marker Claude emits to author a voice-native, one-line spoken summary.
+ * It is an HTML comment on purpose: GitHub-flavored markdown (what Claude Code
+ * renders) hides HTML comments, so the user never SEES the marker in chat, but
+ * it survives verbatim in the raw transcript text that the Stop hook reads.
+ * Both the modern `<!--voice: ...-->` form and the legacy ⟨voice⟩ form parse.
+ */
+const VOICE_MARKER = /(?:<!--\s*voice:\s*([\s\S]*?)\s*-->|⟨voice⟩([\s\S]*?)⟨\/voice⟩)/i;
 
-/** Pull the ⟨voice⟩...⟨/voice⟩ summary out of an assistant message, if present. */
+/** Pull the hidden voice summary out of an assistant message, if present. */
 export function extractVoiceMarker(text: string): string | undefined {
   const m = text.match(VOICE_MARKER);
-  return m ? m[1].trim() : undefined;
+  if (!m) return undefined;
+  return (m[1] ?? m[2] ?? "").trim() || undefined;
 }
 
 /**
@@ -13,6 +20,7 @@ export function extractVoiceMarker(text: string): string | undefined {
  */
 export function sanitizeForSpeech(text: string): string {
   return text
+    .replace(/<!--[\s\S]*?-->/g, " ") // hidden markers / html comments
     .replace(/```[\s\S]*?```/g, " ") // fenced code
     .replace(/`[^`]*`/g, " ") // inline code
     .replace(/!?\[([^\]]*)\]\([^)]*\)/g, "$1") // links/images → label

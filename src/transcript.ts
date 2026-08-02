@@ -8,8 +8,11 @@ interface TurnStats {
 
 /**
  * Best-effort read of the just-finished turn from a Claude Code transcript
- * (JSONL). Returns the last assistant message plus cheap "how much work was
- * this" signals used to gate whether a task is worth summarizing aloud.
+ * (JSONL), used ONLY for the "was this substantial?" heuristic (tool count +
+ * duration). The transcript's raw schema is internal to Claude Code and can
+ * change between versions, so every caller must tolerate `undefined` and never
+ * depend on this for correctness — the spoken text itself comes from the stable
+ * `last_assistant_message` hook field, not from here.
  */
 export function readLastTurn(transcriptPath: string): TurnStats | undefined {
   let lines: string[];
