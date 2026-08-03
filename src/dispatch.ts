@@ -10,7 +10,7 @@ import {
   markSpoken,
   throttled,
 } from "./speak.ts";
-import { clampSpokenLength, extractVoiceMarker, sanitizeForSpeech } from "./sanitize.ts";
+import { clampSpokenLength, extractClosingSentence, extractVoiceMarker, sanitizeForSpeech } from "./sanitize.ts";
 import { readLastTurn } from "./transcript.ts";
 
 /**
@@ -20,9 +20,9 @@ import { readLastTurn } from "./transcript.ts";
  */
 const INSTRUCTION = [
   "[claude-voice] When you finish a substantial task, end your final message with a",
-  "one-sentence spoken summary as an HTML comment: <!--voice: your summary here-->.",
-  "Make it natural and conversational with no code, paths, or URLs (it is read aloud),",
-  "and it stays hidden from the user in the rendered chat. Omit it for trivial replies.",
+  "single short closing sentence that sums up what happened, written as normal",
+  "visible prose. Keep it natural and conversational with no code, file paths, or",
+  "URLs — it is read aloud verbatim. Skip it for trivial replies.",
 ].join(" ");
 
 async function main() {
@@ -57,7 +57,7 @@ async function main() {
 
       const text: string =
         typeof p.last_assistant_message === "string" ? p.last_assistant_message : "";
-      const marker = extractVoiceMarker(text);
+      const marker = extractVoiceMarker(text); // legacy sessions only
 
       // Best-effort "was this substantial?" — never required for correctness.
       const stats = typeof p.transcript_path === "string" ? readLastTurn(p.transcript_path) : undefined;
@@ -75,7 +75,9 @@ async function main() {
         return;
       }
 
-      const spoken = marker ?? clampSpokenLength(sanitizeForSpeech(text));
+      // Claude is taught to end substantial tasks with a speakable closing
+      // sentence, so the message's ending IS the summary.
+      const spoken = marker ?? extractClosingSentence(text);
       if (!spoken) return;
       markSpoken(session);
       detachSpeak(session, spoken, cfg);

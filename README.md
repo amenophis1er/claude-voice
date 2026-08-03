@@ -26,15 +26,20 @@ node src/cli.ts init      # interactive: pick preset/provider/voice, wire hooks
 | **`summary`** (default) | chime + spoken | spoken summary, *substantial tasks only* | — |
 | `verbose` | chime + spoken | spoken summary, always | opt-in milestones |
 
-## How the summary stays good (and invisible)
+## How the summary stays good
 
-A `SessionStart` hook teaches Claude to end substantial tasks with a hidden
-summary written as an HTML comment: `<!--voice: one natural sentence-->`.
-GitHub-flavored markdown (what Claude Code renders) **hides HTML comments**, so
-you never see the marker in chat — but it survives verbatim in the transcript,
-and the `Stop` hook speaks *only* that sentence: a summary Claude wrote to be
-heard, not a robotic read-back. No marker on a substantial task → it falls back
-to a cleaned, clamped version of the last message. Trivial replies stay silent.
+A `SessionStart` hook teaches Claude to end substantial tasks with one natural,
+speakable closing sentence — ordinary visible prose, no code, paths, or URLs.
+The `Stop` hook then speaks the *ending* of the message: a sentence Claude wrote
+to be heard, that also reads as a normal wrap-up in chat. If Claude skips the
+instruction, the same extraction gracefully degrades to a cleaned, clamped tail
+of the last message — the happy path and the fallback are one code path.
+Trivial replies stay silent.
+
+> Earlier versions hid the summary in an HTML comment, assuming Claude Code's
+> terminal renderer strips comments the way GitHub does. It doesn't — they print
+> literally. The comment form is still parsed for sessions started under the old
+> instruction, but is no longer emitted.
 
 Notification cues are tailored by `notification_type` (permission vs idle vs
 needs-input vs complete).

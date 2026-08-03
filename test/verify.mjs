@@ -1,16 +1,43 @@
 import assert from "node:assert";
-import { extractVoiceMarker, sanitizeForSpeech, clampSpokenLength } from "../src/sanitize.ts";
+import {
+  extractClosingSentence,
+  extractVoiceMarker,
+  sanitizeForSpeech,
+  clampSpokenLength,
+} from "../src/sanitize.ts";
 import { readLastTurn } from "../src/transcript.ts";
 import { policyFor } from "../src/config.ts";
 
-// HTML-comment marker (hidden in rendered chat) is extracted...
+// LEGACY: html-comment marker still parses for sessions on the old instruction
 assert.equal(
   extractVoiceMarker("Done.\n\n<!--voice: I split the parser and tests pass.-->"),
   "I split the parser and tests pass.",
 );
-// ...and the legacy angle-bracket form still parses
 assert.equal(extractVoiceMarker("x ⟨voice⟩legacy⟨/voice⟩"), "legacy");
 assert.equal(extractVoiceMarker("no marker here"), undefined);
+
+// PRIMARY: closing sentence — speaks the END of the message, not the start
+assert.equal(
+  extractClosingSentence(
+    "First I refactored the parser module.\n\nThen I fixed the tests.\n\n" +
+      "Everything is refactored and all forty-two tests are passing now.",
+  ),
+  "Everything is refactored and all forty-two tests are passing now.",
+);
+// a too-short final sentence pulls in the previous one
+assert.equal(
+  extractClosingSentence("I rewrote the whole config loader and added tests. Done."),
+  "I rewrote the whole config loader and added tests. Done.",
+);
+// code/paths/urls never reach the spoken text
+const closing = extractClosingSentence(
+  "Fixed it. See `loadConfig()` in /Users/x/config.ts and https://example.com for details on the new loader behavior.",
+);
+assert.ok(!/`|\/Users|https:/.test(closing), `leaked: ${closing}`);
+// empty in → empty out
+assert.equal(extractClosingSentence(""), "");
+// clamped even if the last sentence is a monster
+assert.ok(extractClosingSentence("word ".repeat(200) + "end.").length <= 350);
 
 // sanitize strips code/paths/urls/markdown AND html-comment markers
 const s = sanitizeForSpeech(
