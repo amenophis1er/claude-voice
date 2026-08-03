@@ -32,7 +32,9 @@
   transcript entry) when that's the newest word, else the closing sentence of
   the last assistant message — prefixed with the project name. Built to hang
   off an OS-level hotkey (README ships a Karabiner double-tap-Right-Ctrl
-  rule); speaks even while muted, since you explicitly asked.
+  rule); speaks even while muted, since you explicitly asked. On macOS,
+  `claude-voice shortcut` generates a hotkey-ready Shortcuts workflow with the
+  machine's real paths, signs it locally, and opens the import dialog.
 - **No stale idle nudge:** "Claude is waiting for you" is skipped for 10
   minutes after a spoken summary — it arrived right after the summary and
   implied action was needed when the job was simply done. Silent finishes

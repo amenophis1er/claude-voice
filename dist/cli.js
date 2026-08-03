@@ -8,6 +8,7 @@ import { install, listSystemVoices, uninstall } from "./install.js";
 import { mute, muteStatus, unmute } from "./mute.js";
 import { detachChime, detachSpeak } from "./speak.js";
 import { extractRecap, latestTranscript } from "./recap.js";
+import { createRecapShortcut } from "./shortcut.js";
 import { projectName, withProjectPrefix } from "./announce.js";
 const cmd = process.argv[2];
 switch (cmd) {
@@ -62,6 +63,19 @@ switch (cmd) {
         console.log(spoken);
         break;
     }
+    case "shortcut": {
+        try {
+            const file = createRecapShortcut();
+            console.log(`Opened ${file}`);
+            console.log('Click "Add Shortcut", then in its ⓘ details panel: Add Keyboard Shortcut → e.g. ⌃⌥V.');
+            console.log("(macOS stores hotkeys per device, so that last step can't be automated.)");
+        }
+        catch (err) {
+            console.error(err.message);
+            process.exitCode = 1;
+        }
+        break;
+    }
     case "config":
         console.log(CONFIG_PATH);
         console.log(JSON.stringify(loadConfig(), null, 2));
@@ -86,6 +100,7 @@ switch (cmd) {
             "  claude-voice voices          list system voices",
             "  claude-voice test [text]     synthesize and play a phrase",
             "  claude-voice recap           speak where the latest session stands",
+            "  claude-voice shortcut        macOS: generate a hotkey-ready Shortcut for recap",
             "  claude-voice config          show active config + its path",
             "  claude-voice mute [30m|2h|1d]  mute all audio (no duration = until unmute)",
             "  claude-voice unmute          lift a mute",

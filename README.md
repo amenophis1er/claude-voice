@@ -138,8 +138,23 @@ perfect on a global hotkey: glance away from the screen, tap the key, hear the
 state of play.
 
 Claude Code's in-app keybindings can't run commands (and terminals can't even
-see a bare modifier tap), so bind it at the OS level. Double-tap **Right Ctrl**
-with [Karabiner-Elements](https://karabiner-elements.pqrs.org) (macOS):
+see a bare modifier tap), so bind it at the OS level.
+
+**macOS, zero extra installs** — generate a ready-made Shortcut:
+
+```bash
+npx @amenophis1er/claude-voice shortcut
+```
+
+This builds the Shortcuts workflow with your machine's real paths, signs it
+locally (macOS refuses unsigned shortcut files), and opens the import dialog.
+Click *Add Shortcut*, then in the shortcut's ⓘ details panel assign a global
+hotkey — ⌃⌥V is a safe, mnemonic choice (avoid ⌃⌥R: Claude Code uses it for
+prompt search). The hotkey itself can't ship in the file; Apple stores those
+per device.
+
+**Prefer a double-tap gesture?** Double-tap **Right Ctrl** with
+[Karabiner-Elements](https://karabiner-elements.pqrs.org) (macOS):
 
 ```json
 {

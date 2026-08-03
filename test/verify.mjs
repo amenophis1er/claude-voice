@@ -26,6 +26,7 @@ import {
 } from "../src/speak.ts";
 import { clearMilestone, nextMilestone } from "../src/milestone.ts";
 import { extractRecap, latestTranscript } from "../src/recap.ts";
+import { buildShortcutPlist, recapCommand } from "../src/shortcut.ts";
 
 // LEGACY: html-comment marker still parses for sessions on the old instruction
 assert.equal(
@@ -227,5 +228,14 @@ try {
 } finally {
   rmSync(recapDir, { recursive: true, force: true });
 }
+
+// shortcut generator: absolute machine-local paths, XML-safe embedding
+const rc = recapCommand();
+assert.ok(/^"\/[^"]*node"/.test(rc), rc); // node by absolute path (stable symlink preferred)
+assert.ok(rc.endsWith('cli.ts" recap'), rc); // source checkout → the checkout's cli
+const plist = buildShortcutPlist('run "x" & <y>');
+assert.ok(plist.includes("is.workflow.actions.runshellscript"));
+assert.ok(plist.includes("&amp; &lt;y&gt;"), "special chars must be XML-escaped");
+assert.ok(!plist.includes("& <y>"), "unescaped command leaked into plist");
 
 console.log("ALL ASSERTIONS PASSED");
