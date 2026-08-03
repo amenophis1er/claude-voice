@@ -17,6 +17,11 @@
 - **ElevenLabs now honors `rate`:** the config field was documented for all
   providers but silently ignored by ElevenLabs; it now maps to
   `voice_settings.speed` (clamped to the API's 0.7–1.2 range).
+- **One voice at a time:** audio playback is now serialized machine-wide via
+  a lock (stale holders are detected by pid and stolen), so concurrent jobs —
+  milestone + notification, or two sessions finishing together — queue instead
+  of overlapping. Players also register their pid at spawn time, closing the
+  ~100 ms startup window in which a second job could see silence.
 - **No stale idle nudge:** "Claude is waiting for you" is skipped for 10
   minutes after a spoken summary — it arrived right after the summary and
   implied action was needed when the job was simply done. Silent finishes

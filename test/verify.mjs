@@ -1,5 +1,5 @@
 import assert from "node:assert";
-import { rmSync } from "node:fs";
+import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
@@ -18,7 +18,12 @@ import {
   touchSession,
   withProjectPrefix,
 } from "../src/announce.ts";
-import { markSpoken, throttled } from "../src/speak.ts";
+import {
+  acquirePlaybackLock,
+  markSpoken,
+  releasePlaybackLock,
+  throttled,
+} from "../src/speak.ts";
 import { clearMilestone, nextMilestone } from "../src/milestone.ts";
 
 // LEGACY: html-comment marker still parses for sessions on the old instruction
@@ -135,6 +140,24 @@ try {
   assert.equal(nextMilestone(ms, "Tests green, cleaning up.", 60, t0 + 999_000), "Tests green, cleaning up.");
 } finally {
   clearMilestone(ms);
+}
+
+// playback lock: exclusive, waits (fails open) while held, steals from the dead
+const lockDir = join(tmpdir(), `claude-voice-test-lock-${process.pid}`);
+mkdirSync(lockDir, { recursive: true });
+process.env.CLAUDE_VOICE_LOCK_DIR = lockDir;
+try {
+  assert.equal(await acquirePlaybackLock(500), true); // free → claimed
+  assert.equal(await acquirePlaybackLock(400), false); // held (by us, alive) → timeout
+  releasePlaybackLock();
+  assert.equal(await acquirePlaybackLock(500), true); // released → claimable again
+  releasePlaybackLock();
+  writeFileSync(join(lockDir, "claude-voice-playback.lock"), "999999999"); // dead holder
+  assert.equal(await acquirePlaybackLock(2000), true); // stolen
+  releasePlaybackLock();
+} finally {
+  delete process.env.CLAUDE_VOICE_LOCK_DIR;
+  rmSync(lockDir, { recursive: true, force: true });
 }
 
 console.log("ALL ASSERTIONS PASSED");

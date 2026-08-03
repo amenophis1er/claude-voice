@@ -198,6 +198,10 @@ the *automatic* silencers: `quietHours` (config) and `speakOnlyWhenUnfocused`
   audio still playing.
 - **It never stalls Claude:** hooks are async and audio plays in a detached
   worker process.
+- **One voice at a time:** playback is serialized machine-wide — a milestone,
+  a notification, and another session's summary queue up instead of talking
+  over each other. (Synthesis still runs in parallel; only the speaker is
+  exclusive.)
 - **Notification cues are tailored:** permission prompt, idle, needs-input, and
   task-complete each get an appropriate phrase.
 - **No stale "Claude is waiting for you":** the idle nudge is skipped for 10

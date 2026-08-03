@@ -66,6 +66,16 @@ function detach(job: PlayerJob): void {
     detached: true,
     stdio: "ignore",
   });
+  // Register the pid HERE, not (only) in the player: node takes ~100ms to
+  // boot, and during that window playing() would report silence — enough for
+  // two near-simultaneous events to both decide the coast is clear.
+  if (child.pid) {
+    try {
+      appendFileSync(pidFile(job.session), `${child.pid}\n`);
+    } catch {
+      /* best effort */
+    }
+  }
   child.unref();
 }
 let jobCounter = 0;
@@ -78,14 +88,7 @@ export function playing(session: string): boolean {
       .split("\n")
       .map(Number)
       .filter((n) => Number.isInteger(n) && n > 0)
-      .some((pid) => {
-        try {
-          process.kill(pid, 0);
-          return true;
-        } catch {
-          return false;
-        }
-      });
+      .some(alive);
   } catch {
     return false;
   }
@@ -134,10 +137,20 @@ export async function runJob(job: PlayerJob): Promise<void> {
   appendFileSync(pidFile(job.session), `${process.pid}\n`);
   try {
     cleanupOldAudio();
+    let audioFile: string | undefined;
     if (job.kind === "chime") {
-      await playChime(job.chime ?? "attention");
+      audioFile = chimeFile(job.chime ?? "attention");
     } else if (job.text && job.cfg) {
-      await synthesizeAndPlay(job.text, job.cfg);
+      audioFile = await synthesize(job.text, job.cfg);
+    }
+    if (!audioFile) return;
+    // One voice at a time, machine-wide: synthesis above runs in parallel,
+    // but playback queues so concurrent jobs never talk over each other.
+    const locked = await acquirePlaybackLock();
+    try {
+      await playFile(audioFile);
+    } finally {
+      if (locked) releasePlaybackLock();
     }
   } finally {
     removePid(job.session, process.pid);
@@ -157,36 +170,90 @@ function removePid(session: string, pid: number): void {
   }
 }
 
-async function synthesizeAndPlay(text: string, cfg: VoiceConfig): Promise<void> {
+async function synthesize(text: string, cfg: VoiceConfig): Promise<string> {
   const chosen = getProvider(cfg.provider) ?? defaultProvider();
-  let audioFile: string;
   try {
-    ({ audioFile } = await chosen.synthesize({
-      text,
-      voice: cfg.voice,
-      rate: cfg.rate,
-      options: cfg.options,
-      outDir: AUDIO_DIR,
-    }));
+    return (
+      await chosen.synthesize({
+        text,
+        voice: cfg.voice,
+        rate: cfg.rate,
+        options: cfg.options,
+        outDir: AUDIO_DIR,
+      })
+    ).audioFile;
   } catch (err) {
     logDebug(`provider ${chosen.id} failed: ${(err as Error).message}; falling back`);
     const fb = defaultProvider();
     if (fb.id === chosen.id) throw err;
-    ({ audioFile } = await fb.synthesize({ text, outDir: AUDIO_DIR }));
+    return (await fb.synthesize({ text, outDir: AUDIO_DIR })).audioFile;
   }
-  await playFile(audioFile);
 }
 
-async function playChime(kind: ChimeKind): Promise<void> {
+function chimeFile(kind: ChimeKind): string | undefined {
   if (platform() !== "darwin") {
     logDebug(`chime skipped: no system sound on ${platform()}`);
-    return; // only bundled system sounds on macOS for now
+    return undefined; // only bundled system sounds on macOS for now
   }
-  const sound =
-    kind === "attention"
-      ? "/System/Library/Sounds/Ping.aiff"
-      : "/System/Library/Sounds/Glass.aiff";
-  await playFile(sound);
+  return kind === "attention"
+    ? "/System/Library/Sounds/Ping.aiff"
+    : "/System/Library/Sounds/Glass.aiff";
+}
+
+// ── Playback lock (global) ───────────────────────────────────────────────────
+// There is one pair of speakers; two voices at once is noise no matter which
+// sessions they came from. `wx` creation is the atomic claim; a holder that
+// died (interrupt kills players mid-flight) is detected by pid and stolen.
+const LOCK_TIMEOUT_MS = 30_000;
+
+function lockPath(): string {
+  return join(
+    process.env.CLAUDE_VOICE_LOCK_DIR ?? tmpdir(), // overridable for tests
+    "claude-voice-playback.lock",
+  );
+}
+
+export async function acquirePlaybackLock(timeoutMs = LOCK_TIMEOUT_MS): Promise<boolean> {
+  const deadline = now() + timeoutMs;
+  do {
+    try {
+      writeFileSync(lockPath(), String(process.pid), { flag: "wx" });
+      return true;
+    } catch {
+      try {
+        const holder = Number(readFileSync(lockPath(), "utf8"));
+        if (!holder || !alive(holder)) {
+          unlinkSync(lockPath()); // stale — next iteration claims it
+          continue;
+        }
+      } catch {
+        continue; // lock vanished between checks — retry immediately
+      }
+      await sleep(150);
+    }
+  } while (now() < deadline);
+  return false; // waited long enough — caller plays anyway (fail open)
+}
+
+export function releasePlaybackLock(): void {
+  try {
+    if (Number(readFileSync(lockPath(), "utf8")) === process.pid) unlinkSync(lockPath());
+  } catch {
+    /* already gone */
+  }
+}
+
+function alive(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((r) => setTimeout(r, ms));
 }
 
 /** Cross-platform playback of an audio file. */
