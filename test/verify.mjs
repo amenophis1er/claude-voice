@@ -18,6 +18,7 @@ import {
   touchSession,
   withProjectPrefix,
 } from "../src/announce.ts";
+import { markSpoken, throttled } from "../src/speak.ts";
 
 // LEGACY: html-comment marker still parses for sessions on the old instruction
 assert.equal(
@@ -104,6 +105,19 @@ try {
 } finally {
   delete process.env.CLAUDE_VOICE_SESSIONS_DIR;
   rmSync(announceDir, { recursive: true, force: true });
+}
+
+// idle grace: a fresh spoken summary suppresses the idle nudge (dispatch reuses
+// throttled() for this), other sessions and expired windows don't
+const idleSession = `verify-idle-${process.pid}`;
+try {
+  assert.equal(throttled(idleSession, 600), false); // nothing spoken yet
+  markSpoken(idleSession);
+  assert.equal(throttled(idleSession, 600), true); // summary just spoke → suppress
+  assert.equal(throttled(idleSession, 0), false); // window elapsed → nudge again
+  assert.equal(throttled(`${idleSession}-other`, 600), false); // per-session
+} finally {
+  rmSync(join(tmpdir(), `claude-voice-${idleSession}.last`), { force: true });
 }
 
 console.log("ALL ASSERTIONS PASSED");

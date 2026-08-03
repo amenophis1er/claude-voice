@@ -8,6 +8,10 @@
   `announceProject` config: `"auto"` (default — prefix only while another
   session is active, tracked via per-session heartbeat files), `"always"`,
   or `"off"`. Adds a `SessionEnd` hook that unregisters sessions promptly.
+- **No stale idle nudge:** "Claude is waiting for you" is skipped for 10
+  minutes after a spoken summary — it arrived right after the summary and
+  implied action was needed when the job was simply done. Silent finishes
+  (trivial replies, below-threshold tasks) still get the nudge.
 
 ## 0.4.0 — 2026-08-03
 

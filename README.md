@@ -191,6 +191,9 @@ the *automatic* silencers: `quietHours` (config) and `speakOnlyWhenUnfocused`
   worker process.
 - **Notification cues are tailored:** permission prompt, idle, needs-input, and
   task-complete each get an appropriate phrase.
+- **No stale "Claude is waiting for you":** the idle nudge is skipped for 10
+  minutes after a spoken summary — you already heard the job is done. A
+  *silent* finish (trivial reply, unheard question) still gets the nudge.
 
 ## Troubleshooting
 
@@ -254,6 +257,8 @@ Five Claude Code hooks share one dispatcher (`src/dispatch.ts`):
   the instruction, the same extraction degrades to a cleaned tail of the
   message.
 - **`Notification`** chimes/speaks a cue tailored to the notification type.
+  An `idle_prompt` is dropped while the session's last spoken summary is
+  fresh (10 min) — it would just repeat, less accurately, what was said.
 - **`UserPromptSubmit`** kills all in-flight audio for the session.
 - **`SessionEnd`** removes the session's heartbeat file. Every other event
   refreshes it; `announceProject: "auto"` prefixes spoken text with the

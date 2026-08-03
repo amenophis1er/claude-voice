@@ -18,6 +18,13 @@ const INSTRUCTION = [
     "visible prose. Keep it natural and conversational with no code, file paths, or",
     "URLs — it is read aloud verbatim. Skip it for trivial replies.",
 ].join(" ");
+/**
+ * "Claude is waiting for you" arriving minutes after a spoken summary is a
+ * duplicate with worse information — it implies action is needed when the job
+ * is simply done. Skip the idle nudge while the summary is still fresh; a
+ * SILENT stop (trivial reply, unheard question) still gets the nudge.
+ */
+const IDLE_GRACE_SECONDS = 600;
 async function main() {
     const event = process.argv[2];
     const p = readStdinJson();
@@ -40,6 +47,10 @@ async function main() {
         case "notification": {
             if (silenced(cfg))
                 return;
+            if (p.notification_type === "idle_prompt" && throttled(session, IDLE_GRACE_SECONDS)) {
+                logDebug("notification: skipped idle_prompt (summary spoken recently)");
+                return;
+            }
             if (policy.chimeOnNotification)
                 detachChime(session, "attention");
             if (policy.speakNotification) {
