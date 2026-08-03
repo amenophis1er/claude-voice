@@ -19,6 +19,7 @@ import {
   withProjectPrefix,
 } from "../src/announce.ts";
 import { markSpoken, throttled } from "../src/speak.ts";
+import { clearMilestone, nextMilestone } from "../src/milestone.ts";
 
 // LEGACY: html-comment marker still parses for sessions on the old instruction
 assert.equal(
@@ -65,6 +66,7 @@ const fixture = new URL("./fixtures/transcript.jsonl", import.meta.url).pathname
 const t = readLastTurn(fixture);
 assert.equal(t.toolCalls, 3);
 assert.ok(t.durationSeconds >= 40, `dur=${t.durationSeconds}`);
+assert.ok(t.lastAssistantText.length > 0, "fixture has a final assistant remark");
 
 // mute duration parsing
 assert.equal(parseDurationMs("30m"), 30 * 60_000);
@@ -118,6 +120,21 @@ try {
   assert.equal(throttled(`${idleSession}-other`, 600), false); // per-session
 } finally {
   rmSync(join(tmpdir(), `claude-voice-${idleSession}.last`), { force: true });
+}
+
+// milestones: interval pacing, no-repeat, sanitized, reset at turn boundary
+const ms = `verify-milestone-${process.pid}`;
+try {
+  const t0 = 1_000_000_000_000;
+  assert.equal(nextMilestone(ms, "Now migrating the parser.", 60, t0), "Now migrating the parser.");
+  assert.equal(nextMilestone(ms, "Another remark.", 60, t0 + 30_000), undefined); // too soon
+  assert.equal(nextMilestone(ms, "Now migrating the parser.", 60, t0 + 90_000), undefined); // repeat
+  assert.equal(nextMilestone(ms, "Tests green, cleaning up.", 60, t0 + 90_000), "Tests green, cleaning up.");
+  assert.equal(nextMilestone(ms, "```only code```", 60, t0 + 999_000), undefined); // nothing speakable
+  clearMilestone(ms); // new turn → same remark may speak again immediately
+  assert.equal(nextMilestone(ms, "Tests green, cleaning up.", 60, t0 + 999_000), "Tests green, cleaning up.");
+} finally {
+  clearMilestone(ms);
 }
 
 console.log("ALL ASSERTIONS PASSED");

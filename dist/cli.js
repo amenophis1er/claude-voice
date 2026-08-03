@@ -78,7 +78,7 @@ async function init() {
     const preset = await ui.select("How chatty should it be?", [
         { value: "summary", label: "summary", hint: "spoken wrap-up after substantial tasks — recommended" },
         { value: "chimes", label: "chimes", hint: "sounds only, never speech" },
-        { value: "verbose", label: "verbose", hint: "speak after every task" },
+        { value: "verbose", label: "verbose", hint: "speak after every task + mid-task milestones" },
         { value: "silent", label: "silent", hint: "install now, enable later" },
     ], 0);
     const PROVIDER_HINTS = {

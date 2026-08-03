@@ -59,10 +59,17 @@ One knob controls everything — the `preset`:
 | `silent` | — | — | — |
 | `chimes` | chime | chime | — |
 | **`summary`** (default) | chime + spoken | spoken summary, *substantial tasks only* | — |
-| `verbose` | chime + spoken | spoken summary, always | milestones *(roadmap)* |
+| `verbose` | chime + spoken | spoken summary, always | spoken milestones |
 
 "Substantial" means the task crossed a threshold (default: 3 tool calls or 15
 seconds). Quick back-and-forth stays silent — that's the tasteful part.
+
+**Milestones** (`verbose` only): during a long task, Claude's short progress
+remarks ("Now turning both old copies into pointer stubs.") are spoken so you
+can follow along from across the room — only once the task is already
+substantial, at most one per minute, never repeating itself, and never talking
+over other audio. The task-end summary always wins: it cuts a still-playing
+milestone.
 
 The summary you hear isn't a robotic read-back: Claude is taught (via a session
 instruction the hooks inject) to end real tasks with one natural, speakable
@@ -132,6 +139,7 @@ npx @amenophis1er/claude-voice config          # show active config + where it l
   "rate": 1,
   "options": {},
   "throttleSeconds": 20,
+  "milestoneIntervalSeconds": 60,
   "substantial": { "minToolCalls": 3, "minDurationSeconds": 15 },
   "speakOnlyWhenUnfocused": false,
   "announceProject": "auto",
@@ -147,6 +155,7 @@ npx @amenophis1er/claude-voice config          # show active config + where it l
 | `rate` | Speech speed, `1` = normal. |
 | `options` | Free-form provider extras, e.g. `{ "model_id": "eleven_turbo_v2_5" }`. |
 | `throttleSeconds` | Minimum gap between two spoken summaries in one session. |
+| `milestoneIntervalSeconds` | Minimum gap between two spoken milestones (`verbose`). |
 | `substantial` | A task must clear **one** threshold to be summarized. |
 | `speakOnlyWhenUnfocused` | Speak only when your terminal is **not** the frontmost app (macOS). |
 | `announceProject` | Prefix audio with the project folder name ("claude voice: Task complete."). `"auto"` = only while other sessions are active; `"always"`; `"off"`. |
@@ -245,7 +254,7 @@ Audio I/O is kept at the edges.
 
 ### How it works
 
-Five Claude Code hooks share one dispatcher (`src/dispatch.ts`):
+Six Claude Code hooks share one dispatcher (`src/dispatch.ts`):
 
 - **`SessionStart`** injects an instruction teaching Claude to end substantial
   tasks with one natural, speakable closing sentence (visible prose — an
@@ -260,6 +269,11 @@ Five Claude Code hooks share one dispatcher (`src/dispatch.ts`):
   An `idle_prompt` is dropped while the session's last spoken summary is
   fresh (10 min) — it would just repeat, less accurately, what was said.
 - **`UserPromptSubmit`** kills all in-flight audio for the session.
+- **`PostToolUse`** (verbose preset) speaks Claude's latest progress remark as
+  a mid-task milestone, gated hard: turn already substantial, no audio
+  currently playing, minimum interval, no repeats. The remark is read from the
+  transcript best-effort — if the internal format changes, milestones degrade
+  to silence, never to wrong speech.
 - **`SessionEnd`** removes the session's heartbeat file. Every other event
   refreshes it; `announceProject: "auto"` prefixes spoken text with the
   project name only while another session's heartbeat is fresh (< 30 min).

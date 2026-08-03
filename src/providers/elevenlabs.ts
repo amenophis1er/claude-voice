@@ -32,7 +32,14 @@ export const elevenLabsProvider: TtsProvider = {
           "content-type": "application/json",
           accept: "audio/mpeg",
         },
-        body: JSON.stringify({ text: input.text, model_id: model }),
+        // ElevenLabs supports speed only via voice_settings, valid 0.7–1.2.
+        body: JSON.stringify({
+          text: input.text,
+          model_id: model,
+          ...(input.rate && input.rate !== 1
+            ? { voice_settings: { speed: Math.min(1.2, Math.max(0.7, input.rate)) } }
+            : {}),
+        }),
         signal: AbortSignal.timeout(15_000),
       },
     );

@@ -17,6 +17,8 @@ export interface VoiceConfig {
   options: Record<string, unknown>;
   /** Min seconds between two spoken task-end summaries. */
   throttleSeconds: number;
+  /** Min seconds between two spoken mid-task milestones (verbose preset). */
+  milestoneIntervalSeconds: number;
   /** A task must clear one of these to count as "substantial" and be summarized. */
   substantial: { minToolCalls: number; minDurationSeconds: number };
   /** Optional quiet hours in 24h local time, e.g. { start: 22, end: 8 }. */
@@ -33,6 +35,7 @@ const DEFAULTS: VoiceConfig = {
   rate: 1,
   options: {},
   throttleSeconds: 20,
+  milestoneIntervalSeconds: 60,
   substantial: { minToolCalls: 3, minDurationSeconds: 15 },
   speakOnlyWhenUnfocused: false,
   announceProject: "auto",

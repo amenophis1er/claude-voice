@@ -2,14 +2,16 @@
 import { readFileSync } from "node:fs";
 import { loadConfig, policyFor } from "./config.js";
 import { mutedByFocus } from "./focus.js";
-import { detachChime, detachSpeak, interrupt, logDebug, markSpoken, throttled, } from "./speak.js";
+import { detachChime, detachSpeak, interrupt, logDebug, markSpoken, playing, throttled, } from "./speak.js";
+import { clearMilestone, nextMilestone } from "./milestone.js";
 import { muted } from "./mute.js";
 import { endSession, projectName, shouldAnnounceProject, touchSession, withProjectPrefix, } from "./announce.js";
 import { clampSpokenLength, extractClosingSentence, extractVoiceMarker, sanitizeForSpeech } from "./sanitize.js";
 import { readLastTurn } from "./transcript.js";
 /**
  * Single entry point for every hook. Usage: `node dispatch.ts <event>`
- * where <event> is: stop | notification | prompt-submit | instructions | session-end
+ * where <event> is: stop | notification | prompt-submit | instructions |
+ * milestone | session-end
  * The hook's JSON payload arrives on stdin.
  */
 const INSTRUCTION = [
@@ -43,7 +45,39 @@ async function main() {
             return;
         case "prompt-submit":
             interrupt(session); // new prompt → cut any in-flight audio
+            clearMilestone(session); // new turn → fresh milestone pacing
             return;
+        // PostToolUse, verbose preset only: speak Claude's latest short progress
+        // remark so a long task can be followed from across the room. Tasteful by
+        // construction — only once the turn is already "substantial", never while
+        // other audio plays, at most one per milestoneIntervalSeconds, never the
+        // same remark twice.
+        case "milestone": {
+            if (!policy.speakMilestones)
+                return;
+            if (silenced(cfg))
+                return;
+            if (playing(session))
+                return; // never talk over summary/notification/self
+            if (throttled(session, cfg.throttleSeconds))
+                return; // a summary just spoke
+            const stats = typeof p.transcript_path === "string" ? readLastTurn(p.transcript_path) : undefined;
+            if (!stats)
+                return;
+            const deep = stats.toolCalls >= cfg.substantial.minToolCalls ||
+                stats.durationSeconds >= cfg.substantial.minDurationSeconds;
+            if (!deep) {
+                logDebug("milestone: skipped (turn not substantial yet)");
+                return;
+            }
+            const remark = nextMilestone(session, stats.lastAssistantText, cfg.milestoneIntervalSeconds);
+            if (!remark) {
+                logDebug("milestone: skipped (interval / repeat / nothing speakable)");
+                return;
+            }
+            detachSpeak(session, spokenText(remark, p.cwd, cfg, session), cfg);
+            return;
+        }
         case "notification": {
             if (silenced(cfg))
                 return;
@@ -88,6 +122,7 @@ async function main() {
             if (!spoken)
                 return;
             markSpoken(session);
+            interrupt(session); // a still-playing milestone must not talk over this
             detachSpeak(session, spokenText(spoken, p.cwd, cfg, session), cfg);
             return;
         }

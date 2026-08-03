@@ -8,6 +8,15 @@
   `announceProject` config: `"auto"` (default — prefix only while another
   session is active, tracked via per-session heartbeat files), `"always"`,
   or `"off"`. Adds a `SessionEnd` hook that unregisters sessions promptly.
+- **Milestones are real now:** the `verbose` preset's promised mid-task
+  narration is implemented — a new `PostToolUse` hook speaks Claude's latest
+  short progress remark during long tasks. Heavily gated to stay tasteful:
+  only once the turn is already substantial, never while other audio plays,
+  at most one per `milestoneIntervalSeconds` (default 60), never the same
+  remark twice, and the task-end summary interrupts a still-playing milestone.
+- **ElevenLabs now honors `rate`:** the config field was documented for all
+  providers but silently ignored by ElevenLabs; it now maps to
+  `voice_settings.speed` (clamped to the API's 0.7–1.2 range).
 - **No stale idle nudge:** "Claude is waiting for you" is skipped for 10
   minutes after a spoken summary — it arrived right after the summary and
   implied action was needed when the job was simply done. Silent finishes

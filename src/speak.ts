@@ -70,6 +70,27 @@ function detach(job: PlayerJob): void {
 }
 let jobCounter = 0;
 
+/** Is audio (still) playing for this session? Checks pid liveness, not just
+ * the pid file, so a crashed player can't wedge milestones forever. */
+export function playing(session: string): boolean {
+  try {
+    return readFileSync(pidFile(session), "utf8")
+      .split("\n")
+      .map(Number)
+      .filter((n) => Number.isInteger(n) && n > 0)
+      .some((pid) => {
+        try {
+          process.kill(pid, 0);
+          return true;
+        } catch {
+          return false;
+        }
+      });
+  } catch {
+    return false;
+  }
+}
+
 /**
  * Kill any in-flight audio for this session (called from UserPromptSubmit).
  * The pid file holds one pid per line — a chime and a spoken summary can be
