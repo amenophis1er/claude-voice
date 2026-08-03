@@ -66,6 +66,24 @@ assert.ok(!/`|\/Users|https:|##|\*\*|```|<!--/.test(s), `leaked: ${s}`);
 // clamp caps length
 assert.ok(clampSpokenLength("a. ".repeat(400)).length <= 350);
 
+// clamp never chops mid-word: sentence → clause → word-boundary fallbacks
+// (regression: a 200-char milestone clamp once spoke "…an ask for you, flagged i")
+const egress =
+  "Egress IPs collected (66.175.209.123, 173.255.227.172, 45.79.137.174) — these need " +
+  "allowlisting on Verascape staging before the full rehearsal can submit a real claim; " +
+  "that's an ask for you, flagged in my wrap-up. Meanwhile the branch review is still running.";
+const clamped = clampSpokenLength(sanitizeForSpeech(egress), 200);
+assert.ok(clamped.endsWith("flagged in my wrap-up."), `bad cut: …${clamped.slice(-30)}`);
+const noStops = clampSpokenLength("word ".repeat(100), 200);
+assert.ok(noStops.length <= 200 && noStops.endsWith("word"), `mid-word: …${noStops.slice(-8)}`);
+const clauseOnly = clampSpokenLength(("alpha beta gamma, ").repeat(30), 200);
+assert.ok(/[a-z]$/.test(clauseOnly) && !clauseOnly.endsWith("gamm"), `mid-word: …${clauseOnly.slice(-8)}`);
+
+// IPs never reach the spoken text, and don't leave "( , , )" husks behind
+const ipClean = sanitizeForSpeech(egress);
+assert.ok(!/\d+\.\d+\.\d+\.\d+/.test(ipClean), `IP leaked: ${ipClean}`);
+assert.ok(!/\(\s*[,;]/.test(ipClean), `punctuation husk: ${ipClean}`);
+
 // transcript stats: best-effort, 3 tool calls, ~45s
 const fixture = new URL("./fixtures/transcript.jsonl", import.meta.url).pathname;
 const t = readLastTurn(fixture);

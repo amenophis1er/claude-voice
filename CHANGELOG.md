@@ -22,6 +22,11 @@
   milestone + notification, or two sessions finishing together — queue instead
   of overlapping. Players also register their pid at spawn time, closing the
   ~100 ms startup window in which a second job could see silence.
+- **No more mid-word crops:** when no sentence boundary fit inside the length
+  clamp, the spoken text was hard-sliced mid-word ("…an ask for you, flagged
+  i"). The clamp now degrades gracefully — sentence, else clause, else word
+  boundary. Bare IP addresses are also stripped from spoken text (they read
+  terribly and their dots confused the sentence detector).
 - **No stale idle nudge:** "Claude is waiting for you" is skipped for 10
   minutes after a spoken summary — it arrived right after the summary and
   implied action was needed when the job was simply done. Silent finishes
