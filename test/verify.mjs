@@ -92,6 +92,7 @@ const t = readLastTurn(fixture);
 assert.equal(t.toolCalls, 3);
 assert.ok(t.durationSeconds >= 40, `dur=${t.durationSeconds}`);
 assert.ok(t.lastAssistantText.length > 0, "fixture has a final assistant remark");
+assert.ok(t.lastAssistantTs > 0, "remark timestamp parsed — milestone freshness gate needs it");
 
 // mute duration parsing
 assert.equal(parseDurationMs("30m"), 30 * 60_000);

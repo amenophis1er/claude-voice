@@ -68,8 +68,11 @@ seconds). Quick back-and-forth stays silent — that's the tasteful part.
 remarks ("Now turning both old copies into pointer stubs.") are spoken so you
 can follow along from across the room — only once the task is already
 substantial, at most one per minute, never repeating itself, and never talking
-over other audio. The task-end summary always wins: it cuts a still-playing
-milestone.
+over other audio. Milestones are also *perishable*: a remark older than two
+intervals is never spoken (during long agent runs the last remark can sit
+unchanged for minutes), and if the speaker is busy a milestone is dropped, not
+queued — a delayed glance is a wrong glance. The task-end summary always wins:
+it cuts a still-playing milestone.
 
 The summary you hear isn't a robotic read-back: Claude is taught (via a session
 instruction the hooks inject) to end real tasks with one natural, speakable

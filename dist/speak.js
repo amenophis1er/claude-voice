@@ -42,8 +42,8 @@ export function markSpoken(session) {
 // ── Non-blocking entry points (used by dispatch) ─────────────────────────────
 // Spawn a detached worker that synthesizes + plays, then return immediately so
 // the hook exits fast and never stalls the session.
-export function detachSpeak(session, text, cfg) {
-    detach({ kind: "speak", session, text, cfg });
+export function detachSpeak(session, text, cfg, opts) {
+    detach({ kind: "speak", session, text, cfg, expendable: opts?.expendable });
 }
 export function detachChime(session, chime) {
     detach({ kind: "chime", session, chime });
@@ -129,7 +129,13 @@ export async function runJob(job) {
             return;
         // One voice at a time, machine-wide: synthesis above runs in parallel,
         // but playback queues so concurrent jobs never talk over each other.
-        const locked = await acquirePlaybackLock();
+        // Expendable audio gets a short grace, then is dropped — by the time the
+        // speaker frees up, the moment it narrated is gone.
+        const locked = await acquirePlaybackLock(job.expendable ? 3_000 : undefined);
+        if (!locked && job.expendable) {
+            logDebug("expendable audio dropped: speaker busy");
+            return;
+        }
         try {
             await playFile(audioFile);
         }

@@ -14,6 +14,9 @@
   only once the turn is already substantial, never while other audio plays,
   at most one per `milestoneIntervalSeconds` (default 60), never the same
   remark twice, and the task-end summary interrupts a still-playing milestone.
+  Milestones are perishable: remarks older than two intervals are never spoken
+  (they'd narrate the distant past during long agent runs), and when the
+  speaker is busy a milestone is dropped rather than queued.
 - **ElevenLabs now honors `rate`:** the config field was documented for all
   providers but silently ignored by ElevenLabs; it now maps to
   `voice_settings.speed` (clamped to the API's 0.7–1.2 range).

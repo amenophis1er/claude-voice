@@ -70,12 +70,22 @@ async function main() {
                 logDebug("milestone: skipped (turn not substantial yet)");
                 return;
             }
+            // A milestone is a glance at NOW. During long agent runs the last remark
+            // sits unchanged for many minutes while tool events keep firing —
+            // speaking it then narrates the distant past. Stale remark → silence.
+            const staleMs = 2 * cfg.milestoneIntervalSeconds * 1000;
+            if (!stats.lastAssistantTs || Date.now() - stats.lastAssistantTs > staleMs) {
+                logDebug("milestone: skipped (remark stale)");
+                return;
+            }
             const remark = nextMilestone(session, stats.lastAssistantText, cfg.milestoneIntervalSeconds);
             if (!remark) {
                 logDebug("milestone: skipped (interval / repeat / nothing speakable)");
                 return;
             }
-            detachSpeak(session, spokenText(remark, p.cwd, cfg, session), cfg);
+            // expendable: if the speaker is busy, DROP it rather than queue it —
+            // a delayed glance is a wrong glance (summaries/notifications queue).
+            detachSpeak(session, spokenText(remark, p.cwd, cfg, session), cfg, { expendable: true });
             return;
         }
         case "notification": {
