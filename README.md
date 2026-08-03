@@ -15,17 +15,34 @@ when it's worth interrupting you.**
 ## Quick start
 
 ```bash
-git clone https://github.com/amenophis1er/claude-voice.git && cd claude-voice
-npm install               # dev deps only (typescript); runtime needs nothing
-node src/cli.ts init      # interactive: pick preset/provider/voice, wire hooks
+npx claude-voice init     # interactive: pick preset/provider/voice, wire hooks
 ```
 
 Then **restart Claude Code**. Give it a real task (a few tool calls, ~15s+) and
 you'll hear a spoken wrap-up when it finishes. That's it — the default uses your
 OS's built-in TTS, so there are no API keys and no network calls.
 
-Prefer make? `make init`, `make check`, `make say TEXT="hello"` wrap the same
-npm scripts.
+`init` copies a small compiled runtime (~50 kB, no dependencies) to
+`~/.claude/voice/app/` and points the hooks there — so hooks never touch npx,
+the network, or your npm cache, and keep working across Node version switches.
+Upgrading is `npx claude-voice@latest init`; removal is `npx claude-voice
+uninstall`.
+
+### Other ways to install
+
+- **Claude Code plugin:** the repo ships a plugin manifest, so once it's on a
+  marketplace you can `/plugin install` it instead — Claude Code then manages
+  the hooks itself via `${CLAUDE_PLUGIN_ROOT}`. Use one mechanism or the other,
+  not both.
+- **From source:**
+
+  ```bash
+  git clone https://github.com/amenophis1er/claude-voice.git && cd claude-voice
+  npm install && node src/cli.ts init   # runs the TS directly; needs Node ≥ 23.6
+  ```
+
+  Prefer make? `make init`, `make check`, `make say TEXT="hello"` wrap the same
+  npm scripts.
 
 ## The one knob: `preset`
 
@@ -131,17 +148,11 @@ node src/cli.ts test "Hello"    # synthesize + play a phrase
 node src/cli.ts config          # show active config + its path
 ```
 
-### As a Claude Code plugin
-
-The repo ships a plugin manifest (`.claude-plugin/plugin.json` +
-`hooks/hooks.json`), so it can also be installed through Claude Code's plugin
-system instead of `claude-voice install` — same hooks, resolved via
-`${CLAUDE_PLUGIN_ROOT}`. Use one mechanism or the other, not both.
-
 ## Requirements
 
-- **Node ≥ 23.6** — hooks run the TypeScript directly (type stripping), no
-  build step.
+- **Node ≥ 20** for the npx / plugin install (runs compiled JS). Running
+  straight from a source checkout needs **Node ≥ 23.6** (executes the
+  TypeScript directly via type stripping).
 - **Playback:** macOS `afplay` (built in) / Linux `paplay` / Windows
   PowerShell. Chimes use macOS system sounds and are macOS-only for now.
 - **Linux TTS:** `espeak-ng` (or `espeak`) for the `system` provider.
@@ -164,9 +175,14 @@ system instead of `claude-voice install` — same hooks, resolved via
 ## Development
 
 ```bash
-npm run check     # typecheck (tsc --noEmit) + decision-logic tests
+npm run check     # typecheck + build + decision-logic tests
 npm test          # just the tests (test/verify.mjs, no framework)
+npm run build     # compile src/ → dist/ (plain JS, import paths rewritten)
 ```
+
+`dist/` is committed on purpose: Claude Code plugin installs clone the repo and
+have no build step, so the hooks point at the compiled files. CI fails if
+`dist/` drifts from `src/` — run `npm run build` after changing source.
 
 The interesting logic is deliberately pure and tested: sanitization, closing-
 sentence extraction, clamping, preset policies, transcript stats. Audio I/O is

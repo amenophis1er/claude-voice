@@ -15,6 +15,8 @@ import type { VoiceConfig } from "./config.ts";
 import { defaultProvider, getProvider } from "./providers/registry.ts";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
+/** ".ts" when running straight from source (Node 23.6+), ".js" from dist/. */
+const EXT = import.meta.url.endsWith(".ts") ? ".ts" : ".js";
 const AUDIO_DIR = join(tmpdir(), "claude-voice-audio");
 mkdirSync(AUDIO_DIR, { recursive: true });
 
@@ -60,7 +62,7 @@ export function detachChime(session: string, chime: ChimeKind): void {
 function detach(job: PlayerJob): void {
   const payloadFile = join(AUDIO_DIR, `job-${process.pid}-${jobCounter++}.json`);
   writeFileSync(payloadFile, JSON.stringify(job));
-  const child = spawn(process.execPath, [join(HERE, "player.ts"), payloadFile], {
+  const child = spawn(process.execPath, [join(HERE, `player${EXT}`), payloadFile], {
     detached: true,
     stdio: "ignore",
   });

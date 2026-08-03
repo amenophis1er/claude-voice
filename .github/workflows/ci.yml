@@ -17,3 +17,5 @@ jobs:
           node-version: "24"
       - run: npm install
       - run: npm run check
+      # dist/ is committed so plugin installs need no build step — keep it fresh
+      - run: git diff --exit-code -- dist

@@ -9,9 +9,12 @@
   "homepage": "https://github.com/amenophis1er/claude-voice#readme",
   "type": "module",
   "bin": {
-    "claude-voice": "./src/cli.ts"
+    "claude-voice": "./dist/cli.js"
   },
+  "files": ["dist", "hooks", ".claude-plugin", "CHANGELOG.md"],
   "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "prepack": "npm run build",
     "init": "node src/cli.ts init",
     "hooks:install": "node src/cli.ts install",
     "hooks:uninstall": "node src/cli.ts uninstall",
@@ -21,10 +24,10 @@
     "say": "node src/cli.ts test",
     "test": "node test/verify.mjs",
     "typecheck": "tsc --noEmit",
-    "check": "npm run typecheck && npm run test"
+    "check": "npm run typecheck && npm run build && npm run test"
   },
   "engines": {
-    "node": ">=23.6"
+    "node": ">=20"
   },
   "keywords": ["claude-code", "tts", "voice", "hooks", "plugin"],
   "license": "MIT",

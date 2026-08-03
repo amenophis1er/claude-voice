@@ -1,7 +1,10 @@
 # claude-voice — thin convenience wrapper over the npm scripts (the source of
 # truth). `make` with no target prints this help.
 .DEFAULT_GOAL := help
-.PHONY: help deps init install uninstall check test typecheck list voices config say
+.PHONY: help deps build init install uninstall check test typecheck list voices config say
+
+build: ## Compile src/ → dist/ (plain JS)
+	npm run build
 
 help: ## Show available targets
 	@grep -E '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) \

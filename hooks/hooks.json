@@ -3,28 +3,28 @@
     "SessionStart": [
       {
         "hooks": [
-          { "type": "command", "command": "node \"${CLAUDE_PLUGIN_ROOT}/src/dispatch.ts\" instructions" }
+          { "type": "command", "command": "node \"${CLAUDE_PLUGIN_ROOT}/dist/dispatch.js\" instructions" }
         ]
       }
     ],
     "Stop": [
       {
         "hooks": [
-          { "type": "command", "command": "node \"${CLAUDE_PLUGIN_ROOT}/src/dispatch.ts\" stop", "async": true, "timeout": 30 }
+          { "type": "command", "command": "node \"${CLAUDE_PLUGIN_ROOT}/dist/dispatch.js\" stop", "async": true, "timeout": 30 }
         ]
       }
     ],
     "Notification": [
       {
         "hooks": [
-          { "type": "command", "command": "node \"${CLAUDE_PLUGIN_ROOT}/src/dispatch.ts\" notification", "async": true, "timeout": 30 }
+          { "type": "command", "command": "node \"${CLAUDE_PLUGIN_ROOT}/dist/dispatch.js\" notification", "async": true, "timeout": 30 }
         ]
       }
     ],
     "UserPromptSubmit": [
       {
         "hooks": [
-          { "type": "command", "command": "node \"${CLAUDE_PLUGIN_ROOT}/src/dispatch.ts\" prompt-submit" }
+          { "type": "command", "command": "node \"${CLAUDE_PLUGIN_ROOT}/dist/dispatch.js\" prompt-submit" }
         ]
       }
     ]
