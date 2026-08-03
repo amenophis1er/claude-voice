@@ -1,6 +1,7 @@
 {
-  "name": "claude-voice",
+  "name": "@amenophis1er/claude-voice",
   "version": "0.1.0",
+  "publishConfig": { "access": "public" },
   "description": "Give Claude Code a voice — selective, tasteful spoken summaries and attention cues. Quiet by default.",
   "repository": {
     "type": "git",

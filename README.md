@@ -15,7 +15,7 @@ when it's worth interrupting you.**
 ### Option 1 — npx (recommended)
 
 ```bash
-npx claude-voice init
+npx @amenophis1er/claude-voice init
 ```
 
 The interactive setup lets you pick a verbosity preset, a voice, and a TTS
@@ -27,8 +27,8 @@ dependencies) to `~/.claude/voice/app/` and points the hooks at that stable
 path — hooks never touch npx, the network, or your npm cache, and keep working
 when you switch Node versions.
 
-- **Upgrade:** `npx claude-voice@latest init`
-- **Remove:** `npx claude-voice uninstall` (your config is kept)
+- **Upgrade:** `npx @amenophis1er/claude-voice@latest init`
+- **Remove:** `npx @amenophis1er/claude-voice uninstall` (your config is kept)
 
 ### Option 2 — Claude Code plugin
 
@@ -85,10 +85,10 @@ system voice automatically — you still hear your summary.
 Useful commands:
 
 ```bash
-npx claude-voice voices          # list system voices (try "Ava (Premium)" on macOS)
-npx claude-voice test "Hello"    # hear the current voice right now
-npx claude-voice list            # list providers
-npx claude-voice config          # show active config + where it lives
+npx @amenophis1er/claude-voice voices          # list system voices (try "Ava (Premium)" on macOS)
+npx @amenophis1er/claude-voice test "Hello"    # hear the current voice right now
+npx @amenophis1er/claude-voice list            # list providers
+npx @amenophis1er/claude-voice config          # show active config + where it lives
 ```
 
 ## Configuration
@@ -121,7 +121,7 @@ npx claude-voice config          # show active config + where it lives
 | `speakOnlyWhenUnfocused` | Speak only when your terminal is **not** the frontmost app (macOS). |
 | `quietHours` | 24h local time; wraps midnight (`22 → 8` means 10pm–8am). |
 
-Edit the file directly or rerun `npx claude-voice init` — changes apply on the
+Edit the file directly or rerun `npx @amenophis1er/claude-voice init` — changes apply on the
 next task, no restart needed.
 
 ## Nice to know
@@ -138,7 +138,7 @@ next task, no restart needed.
 ## Troubleshooting
 
 - **Nothing is ever spoken** — restart Claude Code after installing; hooks load
-  at startup. Then check `npx claude-voice test "hello"` produces audio at all.
+  at startup. Then check `npx @amenophis1er/claude-voice test "hello"` produces audio at all.
 - **Short tasks are silent** — by design. Lower the `substantial` thresholds or
   set `preset: "verbose"` to speak everything.
 - **No chimes on Linux/Windows** — expected for now; summaries still speak.
