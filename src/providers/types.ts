@@ -10,7 +10,7 @@
  * cut audio the instant the user submits a new prompt.
  */
 export interface TtsProvider {
-  /** Stable id used in config, e.g. "say", "elevenlabs", "openai". */
+  /** Stable id used in config, e.g. "system", "elevenlabs", "openai". */
   readonly id: string;
 
   /** Human label for logs / CLI. */

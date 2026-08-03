@@ -68,15 +68,26 @@ function detach(job: PlayerJob): void {
 }
 let jobCounter = 0;
 
-/** Kill any in-flight audio for this session (called from UserPromptSubmit). */
+/**
+ * Kill any in-flight audio for this session (called from UserPromptSubmit).
+ * The pid file holds one pid per line — a chime and a spoken summary can be
+ * playing at once (e.g. a notification), and both must die.
+ */
 export function interrupt(session: string): void {
   try {
-    const pid = Number(readFileSync(pidFile(session), "utf8"));
-    if (pid) {
+    const pids = readFileSync(pidFile(session), "utf8")
+      .split("\n")
+      .map(Number)
+      .filter((n) => Number.isInteger(n) && n > 0);
+    for (const pid of pids) {
       try {
         process.kill(-pid, "SIGTERM"); // whole detached group (synth + player)
       } catch {
-        process.kill(pid, "SIGTERM");
+        try {
+          process.kill(pid, "SIGTERM");
+        } catch {
+          /* already gone */
+        }
       }
     }
     unlinkSync(pidFile(session));
@@ -97,7 +108,7 @@ export type ChimeKind = "attention" | "done";
 
 /** Run one job to completion. The detached player calls this. */
 export async function runJob(job: PlayerJob): Promise<void> {
-  writeFileSync(pidFile(job.session), String(process.pid));
+  appendFileSync(pidFile(job.session), `${process.pid}\n`);
   try {
     cleanupOldAudio();
     if (job.kind === "chime") {
@@ -106,11 +117,20 @@ export async function runJob(job: PlayerJob): Promise<void> {
       await synthesizeAndPlay(job.text, job.cfg);
     }
   } finally {
-    try {
-      unlinkSync(pidFile(job.session));
-    } catch {
-      /* already gone */
-    }
+    removePid(job.session, process.pid);
+  }
+}
+
+/** Best-effort: drop our pid from the session's pid file, unlink when empty. */
+function removePid(session: string, pid: number): void {
+  try {
+    const rest = readFileSync(pidFile(session), "utf8")
+      .split("\n")
+      .filter((l) => l.trim() && Number(l) !== pid);
+    if (rest.length === 0) unlinkSync(pidFile(session));
+    else writeFileSync(pidFile(session), rest.join("\n") + "\n");
+  } catch {
+    /* already gone */
   }
 }
 

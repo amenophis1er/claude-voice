@@ -71,10 +71,10 @@ async function init(): Promise<void> {
 
   console.log("\nclaude-voice setup — press Enter to accept the default.\n");
 
-  const preset = (await ask(
-    "Verbosity: silent | chimes | summary | verbose",
-    "summary",
-  )) as Preset;
+  const PRESETS: Preset[] = ["silent", "chimes", "summary", "verbose"];
+  const presetIn = await ask("Verbosity: silent | chimes | summary | verbose", "summary");
+  const preset: Preset = (PRESETS as string[]).includes(presetIn) ? (presetIn as Preset) : "summary";
+  if (preset !== presetIn) console.log(`  (unknown preset "${presetIn}" — using "summary")`);
 
   console.log("\nProviders:");
   for (const p of listProviders()) {

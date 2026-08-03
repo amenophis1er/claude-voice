@@ -1,0 +1,5 @@
+{"type":"user","timestamp":"2026-08-02T10:00:00Z","message":{"content":[{"type":"text","text":"refactor the parser"}]}}
+{"type":"assistant","timestamp":"2026-08-02T10:00:05Z","message":{"content":[{"type":"tool_use","name":"Edit"}]}}
+{"type":"assistant","timestamp":"2026-08-02T10:00:20Z","message":{"content":[{"type":"tool_use","name":"Edit"}]}}
+{"type":"assistant","timestamp":"2026-08-02T10:00:40Z","message":{"content":[{"type":"tool_use","name":"Bash"}]}}
+{"type":"assistant","timestamp":"2026-08-02T10:00:45Z","message":{"content":[{"type":"text","text":"I refactored `parser.ts` into three modules and tests pass. See /Users/x/parser.ts.\n\n⟨voice⟩Done — I split the parser into three modules and all tests pass.⟨/voice⟩"}]}}

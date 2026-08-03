@@ -49,7 +49,8 @@ assert.ok(!/`|\/Users|https:|##|\*\*|```|<!--/.test(s), `leaked: ${s}`);
 assert.ok(clampSpokenLength("a. ".repeat(400)).length <= 350);
 
 // transcript stats: best-effort, 3 tool calls, ~45s
-const t = readLastTurn("/tmp/fake-transcript.jsonl");
+const fixture = new URL("./fixtures/transcript.jsonl", import.meta.url).pathname;
+const t = readLastTurn(fixture);
 assert.equal(t.toolCalls, 3);
 assert.ok(t.durationSeconds >= 40, `dur=${t.durationSeconds}`);
 
