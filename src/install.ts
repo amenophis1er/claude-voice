@@ -10,7 +10,9 @@ const COMPILED = import.meta.url.endsWith(".js");
 /** Stable home for the vendored runtime — survives npx cache eviction and nvm switches. */
 export const APP_DIR = join(homedir(), ".claude", "voice", "app");
 const SETTINGS = join(homedir(), ".claude", "settings.json");
-const COMMAND_FILE = join(homedir(), ".claude", "commands", "voice.md");
+// NOT voice.md: /voice is a Claude Code built-in (voice input mode), and
+// built-ins shadow user-level commands with no automatic prefixing.
+const COMMAND_FILE = join(homedir(), ".claude", "commands", "claude-voice.md");
 
 interface HookCmd {
   type: "command";
@@ -63,9 +65,9 @@ export function install(): string {
 }
 
 /**
- * /voice slash command: mute, unmute, status — one file in ~/.claude/commands.
- * The npx/plugin double-install guard doesn't apply here: plugin installs ship
- * their own commands/voice.md, and Claude Code namespaces those separately.
+ * /claude-voice slash command: mute, unmute, status — one file under
+ * ~/.claude/commands. Plugin installs ship their own commands/claude-voice.md
+ * instead, which Claude Code namespaces separately.
  */
 function writeCommandFile(appDir: string): void {
   const cli = join(appDir, COMPILED ? "cli.js" : "cli.ts");

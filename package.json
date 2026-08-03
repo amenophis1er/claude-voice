@@ -10,7 +10,7 @@
   "homepage": "https://github.com/amenophis1er/claude-voice#readme",
   "type": "module",
   "bin": {
-    "claude-voice": "./dist/cli.js"
+    "claude-voice": "dist/cli.js"
   },
   "files": ["dist", "hooks", ".claude-plugin", "CHANGELOG.md"],
   "scripts": {

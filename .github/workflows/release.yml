@@ -1,0 +1,27 @@
+name: release
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write # create the GitHub release
+  id-token: write # npm trusted publishing (OIDC)
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          registry-url: https://registry.npmjs.org
+      - run: npm install
+      - run: npm run check
+      - run: git diff --exit-code -- dist
+      # Publishes via npm trusted publishing — configure this repo + workflow
+      # as a Trusted Publisher in the package settings on npmjs.com (no token).
+      - run: npm publish
+      - run: gh release create "$GITHUB_REF_NAME" --title "$GITHUB_REF_NAME" --generate-notes
+        env:
+          GH_TOKEN: ${{ github.token }}

@@ -130,10 +130,12 @@ Sometimes you want silence *now* — a call, a screen share, pairing. Three ways
 all equivalent:
 
 ```
-/voice mute 1h        # inside Claude Code (slash command, installed with the hooks)
-/voice unmute
-/voice status
+/claude-voice mute 1h    # inside Claude Code (slash command, installed with the hooks)
+/claude-voice unmute
+/claude-voice status
 ```
+
+(Why not `/voice`? That name is a Claude Code built-in.)
 
 ```bash
 npx @amenophis1er/claude-voice mute 2h    # or: mute 30m, mute 1d, mute (= until unmute)
@@ -225,6 +227,13 @@ duration since the last *human* message — tool results also arrive as
 `type:"user"` entries and must not count as turn boundaries). Transcript
 parsing is never load-bearing: if the internal format changes, summaries still
 work.
+
+### Releasing
+
+Releases are CI-driven: bump the version in `package.json` + 
+`.claude-plugin/plugin.json`, update `CHANGELOG.md`, then push a `v*` tag.
+The release workflow runs the checks, publishes to npm (trusted publishing —
+no token), and creates the GitHub release with generated notes.
 
 ### Adding a TTS provider
 
