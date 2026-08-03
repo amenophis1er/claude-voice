@@ -15,7 +15,7 @@ when it's worth interrupting you.**
 ## Quick start
 
 ```bash
-git clone <this repo> && cd claude-voice
+git clone https://github.com/amenophis1er/claude-voice.git && cd claude-voice
 npm install               # dev deps only (typescript); runtime needs nothing
 node src/cli.ts init      # interactive: pick preset/provider/voice, wire hooks
 ```

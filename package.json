@@ -2,6 +2,11 @@
   "name": "claude-voice",
   "version": "0.1.0",
   "description": "Give Claude Code a voice — selective, tasteful spoken summaries and attention cues. Quiet by default.",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/amenophis1er/claude-voice.git"
+  },
+  "homepage": "https://github.com/amenophis1er/claude-voice#readme",
   "type": "module",
   "bin": {
     "claude-voice": "./src/cli.ts"
