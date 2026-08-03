@@ -1,4 +1,7 @@
 import assert from "node:assert";
+import { rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import {
   extractClosingSentence,
   extractVoiceMarker,
@@ -8,6 +11,13 @@ import {
 import { parseDurationMs } from "../src/mute.ts";
 import { readLastTurn } from "../src/transcript.ts";
 import { policyFor } from "../src/config.ts";
+import {
+  endSession,
+  projectName,
+  shouldAnnounceProject,
+  touchSession,
+  withProjectPrefix,
+} from "../src/announce.ts";
 
 // LEGACY: html-comment marker still parses for sessions on the old instruction
 assert.equal(
@@ -69,5 +79,31 @@ assert.equal(policyFor("summary").speakSummary, true);
 assert.equal(policyFor("summary").speakAlways, false); // substantial-gated
 assert.equal(policyFor("verbose").speakAlways, true); // always
 assert.equal(policyFor("chimes").speakSummary, false);
+
+// project announcement: name derivation is speakable
+assert.equal(projectName("/Users/x/Projects/claude-voice"), "claude voice");
+assert.equal(projectName("/srv/my_app.v2"), "my app v2");
+assert.equal(projectName(undefined), undefined);
+assert.equal(projectName(""), undefined);
+assert.equal(withProjectPrefix("Task complete.", "claude voice"), "claude voice: Task complete.");
+assert.equal(withProjectPrefix("Task complete.", undefined), "Task complete.");
+
+// announce policy: always/off are unconditional, auto needs ANOTHER live session
+const announceDir = join(tmpdir(), `claude-voice-test-sessions-${process.pid}`);
+process.env.CLAUDE_VOICE_SESSIONS_DIR = announceDir;
+try {
+  assert.equal(shouldAnnounceProject({ announceProject: "always" }, "a"), true);
+  assert.equal(shouldAnnounceProject({ announceProject: "off" }, "a"), false);
+  assert.equal(shouldAnnounceProject({ announceProject: "auto" }, "a"), false); // alone
+  touchSession("a"); // my own heartbeat doesn't count
+  assert.equal(shouldAnnounceProject({ announceProject: "auto" }, "a"), false);
+  touchSession("b"); // a second session appears
+  assert.equal(shouldAnnounceProject({ announceProject: "auto" }, "a"), true);
+  endSession("b"); // and ends
+  assert.equal(shouldAnnounceProject({ announceProject: "auto" }, "a"), false);
+} finally {
+  delete process.env.CLAUDE_VOICE_SESSIONS_DIR;
+  rmSync(announceDir, { recursive: true, force: true });
+}
 
 console.log("ALL ASSERTIONS PASSED");

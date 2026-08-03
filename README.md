@@ -134,6 +134,7 @@ npx @amenophis1er/claude-voice config          # show active config + where it l
   "throttleSeconds": 20,
   "substantial": { "minToolCalls": 3, "minDurationSeconds": 15 },
   "speakOnlyWhenUnfocused": false,
+  "announceProject": "auto",
   "quietHours": { "start": 22, "end": 8 }
 }
 ```
@@ -148,6 +149,7 @@ npx @amenophis1er/claude-voice config          # show active config + where it l
 | `throttleSeconds` | Minimum gap between two spoken summaries in one session. |
 | `substantial` | A task must clear **one** threshold to be summarized. |
 | `speakOnlyWhenUnfocused` | Speak only when your terminal is **not** the frontmost app (macOS). |
+| `announceProject` | Prefix audio with the project folder name ("claude voice: Task complete."). `"auto"` = only while other sessions are active; `"always"`; `"off"`. |
 | `quietHours` | 24h local time; wraps midnight (`22 → 8` means 10pm–8am). |
 
 Edit the file directly or rerun `npx @amenophis1er/claude-voice init` — changes apply on the
@@ -180,6 +182,9 @@ the *automatic* silencers: `quietHours` (config) and `speakOnlyWhenUnfocused`
 
 - **Parallel sessions don't fight:** state is per-session, so two Claude Code
   windows won't interrupt or throttle each other.
+- **You can tell sessions apart:** while more than one session is running,
+  spoken audio is prefixed with the project folder name — "claude voice: Task
+  complete." — so you know which window is talking (`announceProject`).
 - **It shuts up when you type:** submitting a new prompt instantly kills any
   audio still playing.
 - **It never stalls Claude:** hooks are async and audio plays in a detached
@@ -237,7 +242,7 @@ Audio I/O is kept at the edges.
 
 ### How it works
 
-Four Claude Code hooks share one dispatcher (`src/dispatch.ts`):
+Five Claude Code hooks share one dispatcher (`src/dispatch.ts`):
 
 - **`SessionStart`** injects an instruction teaching Claude to end substantial
   tasks with one natural, speakable closing sentence (visible prose — an
@@ -250,6 +255,9 @@ Four Claude Code hooks share one dispatcher (`src/dispatch.ts`):
   message.
 - **`Notification`** chimes/speaks a cue tailored to the notification type.
 - **`UserPromptSubmit`** kills all in-flight audio for the session.
+- **`SessionEnd`** removes the session's heartbeat file. Every other event
+  refreshes it; `announceProject: "auto"` prefixes spoken text with the
+  project name only while another session's heartbeat is fresh (< 30 min).
 
 Substantiality is measured best-effort from the transcript JSONL (tool calls +
 duration since the last *human* message — tool results also arrive as

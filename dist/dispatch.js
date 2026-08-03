@@ -4,11 +4,12 @@ import { loadConfig, policyFor } from "./config.js";
 import { mutedByFocus } from "./focus.js";
 import { detachChime, detachSpeak, interrupt, logDebug, markSpoken, throttled, } from "./speak.js";
 import { muted } from "./mute.js";
+import { endSession, projectName, shouldAnnounceProject, touchSession, withProjectPrefix, } from "./announce.js";
 import { clampSpokenLength, extractClosingSentence, extractVoiceMarker, sanitizeForSpeech } from "./sanitize.js";
 import { readLastTurn } from "./transcript.js";
 /**
  * Single entry point for every hook. Usage: `node dispatch.ts <event>`
- * where <event> is: stop | notification | prompt-submit | instructions
+ * where <event> is: stop | notification | prompt-submit | instructions | session-end
  * The hook's JSON payload arrives on stdin.
  */
 const INSTRUCTION = [
@@ -23,6 +24,12 @@ async function main() {
     const cfg = loadConfig();
     const policy = policyFor(cfg.preset);
     const session = typeof p.session_id === "string" ? p.session_id : "default";
+    if (event === "session-end") {
+        endSession(session);
+        return;
+    }
+    // Heartbeat: lets announceProject "auto" see that parallel sessions exist.
+    touchSession(session);
     switch (event) {
         case "instructions":
             emitAdditionalContext(INSTRUCTION); // SessionStart (synchronous)
@@ -36,7 +43,8 @@ async function main() {
             if (policy.chimeOnNotification)
                 detachChime(session, "attention");
             if (policy.speakNotification) {
-                detachSpeak(session, notificationPhrase(p.notification_type, p.message), cfg);
+                const phrase = notificationPhrase(p.notification_type, p.message);
+                detachSpeak(session, spokenText(phrase, p.cwd, cfg, session), cfg);
             }
             return;
         }
@@ -69,12 +77,16 @@ async function main() {
             if (!spoken)
                 return;
             markSpoken(session);
-            detachSpeak(session, spoken, cfg);
+            detachSpeak(session, spokenText(spoken, p.cwd, cfg, session), cfg);
             return;
         }
         default:
             process.stderr.write(`[claude-voice] unknown event: ${event}\n`);
     }
+}
+/** Prefix with the project name when config + session context say to. */
+function spokenText(text, cwd, cfg, session) {
+    return shouldAnnounceProject(cfg, session) ? withProjectPrefix(text, projectName(cwd)) : text;
 }
 /** Purposeful mute + quiet hours + focus muting, shared by stop/notification. */
 function silenced(cfg) {

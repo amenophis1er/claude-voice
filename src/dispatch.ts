@@ -11,12 +11,19 @@ import {
   throttled,
 } from "./speak.ts";
 import { muted } from "./mute.ts";
+import {
+  endSession,
+  projectName,
+  shouldAnnounceProject,
+  touchSession,
+  withProjectPrefix,
+} from "./announce.ts";
 import { clampSpokenLength, extractClosingSentence, extractVoiceMarker, sanitizeForSpeech } from "./sanitize.ts";
 import { readLastTurn } from "./transcript.ts";
 
 /**
  * Single entry point for every hook. Usage: `node dispatch.ts <event>`
- * where <event> is: stop | notification | prompt-submit | instructions
+ * where <event> is: stop | notification | prompt-submit | instructions | session-end
  * The hook's JSON payload arrives on stdin.
  */
 const INSTRUCTION = [
@@ -33,6 +40,13 @@ async function main() {
   const policy = policyFor(cfg.preset);
   const session = typeof p.session_id === "string" ? p.session_id : "default";
 
+  if (event === "session-end") {
+    endSession(session);
+    return;
+  }
+  // Heartbeat: lets announceProject "auto" see that parallel sessions exist.
+  touchSession(session);
+
   switch (event) {
     case "instructions":
       emitAdditionalContext(INSTRUCTION); // SessionStart (synchronous)
@@ -46,7 +60,8 @@ async function main() {
       if (silenced(cfg)) return;
       if (policy.chimeOnNotification) detachChime(session, "attention");
       if (policy.speakNotification) {
-        detachSpeak(session, notificationPhrase(p.notification_type, p.message), cfg);
+        const phrase = notificationPhrase(p.notification_type, p.message);
+        detachSpeak(session, spokenText(phrase, p.cwd, cfg, session), cfg);
       }
       return;
     }
@@ -81,13 +96,18 @@ async function main() {
       const spoken = marker ?? extractClosingSentence(text);
       if (!spoken) return;
       markSpoken(session);
-      detachSpeak(session, spoken, cfg);
+      detachSpeak(session, spokenText(spoken, p.cwd, cfg, session), cfg);
       return;
     }
 
     default:
       process.stderr.write(`[claude-voice] unknown event: ${event}\n`);
   }
+}
+
+/** Prefix with the project name when config + session context say to. */
+function spokenText(text: string, cwd: unknown, cfg: VoiceConfig, session: string): string {
+  return shouldAnnounceProject(cfg, session) ? withProjectPrefix(text, projectName(cwd)) : text;
 }
 
 /** Purposeful mute + quiet hours + focus muting, shared by stop/notification. */

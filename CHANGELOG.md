@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.5.0 — 2026-08-03
+
+- **Tell parallel sessions apart:** spoken audio can be prefixed with the
+  project folder name — "claude voice: Task complete." — so with several
+  Claude Code sessions open you know which one is talking. New
+  `announceProject` config: `"auto"` (default — prefix only while another
+  session is active, tracked via per-session heartbeat files), `"always"`,
+  or `"off"`. Adds a `SessionEnd` hook that unregisters sessions promptly.
+
 ## 0.4.0 — 2026-08-03
 
 - **Redesigned `init`:** arrow-key menus, styled steps, spinner, and a proper

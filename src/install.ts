@@ -27,6 +27,7 @@ const WIRING: Array<[string, string, boolean]> = [
   ["UserPromptSubmit", "prompt-submit", false], // sync: fast interrupt
   ["Stop", "stop", true],
   ["Notification", "notification", true],
+  ["SessionEnd", "session-end", false], // sync: just unlinks the heartbeat file
 ];
 
 /**

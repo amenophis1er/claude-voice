@@ -27,6 +27,13 @@
           { "type": "command", "command": "node \"${CLAUDE_PLUGIN_ROOT}/dist/dispatch.js\" prompt-submit" }
         ]
       }
+    ],
+    "SessionEnd": [
+      {
+        "hooks": [
+          { "type": "command", "command": "node \"${CLAUDE_PLUGIN_ROOT}/dist/dispatch.js\" session-end" }
+        ]
+      }
     ]
   }
 }
