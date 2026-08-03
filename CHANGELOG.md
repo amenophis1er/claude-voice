@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.3.0 — 2026-08-02
+
+- **API keys from secret managers:** cloud providers now resolve their key as
+  env var → `options.api_key` → `options.apiKeyCommand` (a shell command whose
+  stdout is the key, e.g. 1Password's `op read`). Hooks run outside your shell
+  rc, so this is the reliable way to feed keys without exporting them globally.
+
 ## 0.2.0 — 2026-08-02
 
 - **Purposeful mute:** `claude-voice mute [30m|2h|1d]` / `unmute` / `status`,

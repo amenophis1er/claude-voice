@@ -1,5 +1,6 @@
 import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { resolveApiKey } from "./apikey.ts";
 import type { SynthesizeInput, SynthesizeResult, TtsProvider } from "./types.ts";
 
 const DEFAULT_VOICE = "21m00Tcm4TlvDq8ikWAM"; // "Rachel"
@@ -15,8 +16,9 @@ export const elevenLabsProvider: TtsProvider = {
   zeroConfig: false,
 
   async synthesize(input: SynthesizeInput): Promise<SynthesizeResult> {
-    const apiKey = process.env.ELEVENLABS_API_KEY;
-    if (!apiKey) throw new Error("ELEVENLABS_API_KEY is not set");
+    const apiKey = resolveApiKey("ELEVENLABS_API_KEY", input.options);
+    if (!apiKey)
+      throw new Error("no ElevenLabs key: set ELEVENLABS_API_KEY, or api_key / apiKeyCommand in options");
 
     const voice = input.voice ?? DEFAULT_VOICE;
     const model = (input.options?.model_id as string) ?? DEFAULT_MODEL;

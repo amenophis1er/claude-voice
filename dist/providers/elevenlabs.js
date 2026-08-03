@@ -1,5 +1,6 @@
 import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { resolveApiKey } from "./apikey.js";
 const DEFAULT_VOICE = "21m00Tcm4TlvDq8ikWAM"; // "Rachel"
 const DEFAULT_MODEL = "eleven_turbo_v2_5";
 /**
@@ -11,9 +12,9 @@ export const elevenLabsProvider = {
     label: "ElevenLabs",
     zeroConfig: false,
     async synthesize(input) {
-        const apiKey = process.env.ELEVENLABS_API_KEY;
+        const apiKey = resolveApiKey("ELEVENLABS_API_KEY", input.options);
         if (!apiKey)
-            throw new Error("ELEVENLABS_API_KEY is not set");
+            throw new Error("no ElevenLabs key: set ELEVENLABS_API_KEY, or api_key / apiKeyCommand in options");
         const voice = input.voice ?? DEFAULT_VOICE;
         const model = input.options?.model_id ?? DEFAULT_MODEL;
         const res = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${voice}`, {

@@ -1,5 +1,6 @@
 import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { resolveApiKey } from "./apikey.js";
 const DEFAULT_VOICE = "nova";
 const DEFAULT_MODEL = "gpt-4o-mini-tts";
 /**
@@ -10,9 +11,9 @@ export const openAiProvider = {
     label: "OpenAI TTS",
     zeroConfig: false,
     async synthesize(input) {
-        const apiKey = process.env.OPENAI_API_KEY;
+        const apiKey = resolveApiKey("OPENAI_API_KEY", input.options);
         if (!apiKey)
-            throw new Error("OPENAI_API_KEY is not set");
+            throw new Error("no OpenAI key: set OPENAI_API_KEY, or api_key / apiKeyCommand in options");
         const res = await fetch("https://api.openai.com/v1/audio/speech", {
             method: "POST",
             headers: {

@@ -82,6 +82,20 @@ API keys, works offline. Two opt-in upgrades:
 If a cloud provider fails (no key, network down, timeout), it falls back to the
 system voice automatically — you still hear your summary.
 
+**Keys from a secret manager:** hooks run outside your shell rc, so env vars
+set by on-demand loaders are often absent. Instead of exporting keys globally,
+give the provider a command that prints the key:
+
+```json
+{
+  "provider": "elevenlabs",
+  "options": { "apiKeyCommand": "op read op://dev-env/ELEVENLABS_API_KEY/credential" }
+}
+```
+
+Resolution order: env var → `options.api_key` (plaintext, discouraged) →
+`options.apiKeyCommand` (1Password `op`, macOS `security`, `pass`, …).
+
 Useful commands:
 
 ```bash
