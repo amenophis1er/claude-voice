@@ -27,6 +27,12 @@
   i"). The clamp now degrades gracefully — sentence, else clause, else word
   boundary. Bare IP addresses are also stripped from spoken text (they read
   terribly and their dots confused the sentence detector).
+- **On-demand recap:** `claude-voice recap` speaks where the most recent
+  session stands — Claude Code's persisted idle recap (`away_summary`
+  transcript entry) when that's the newest word, else the closing sentence of
+  the last assistant message — prefixed with the project name. Built to hang
+  off an OS-level hotkey (README ships a Karabiner double-tap-Right-Ctrl
+  rule); speaks even while muted, since you explicitly asked.
 - **No stale idle nudge:** "Claude is waiting for you" is skipped for 10
   minutes after a spoken summary — it arrived right after the summary and
   implied action was needed when the job was simply done. Silent finishes

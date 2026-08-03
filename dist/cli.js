@@ -7,6 +7,8 @@ import { listProviders } from "./providers/registry.js";
 import { install, listSystemVoices, uninstall } from "./install.js";
 import { mute, muteStatus, unmute } from "./mute.js";
 import { detachChime, detachSpeak } from "./speak.js";
+import { extractRecap, latestTranscript } from "./recap.js";
+import { projectName, withProjectPrefix } from "./announce.js";
 const cmd = process.argv[2];
 switch (cmd) {
     case "mute":
@@ -44,6 +46,22 @@ switch (cmd) {
         console.log("Playing… (detached)");
         break;
     }
+    // Speak where the most recent session stands — made to hang off an OS-level
+    // hotkey (see README). Explicitly invoked, so it speaks even while muted,
+    // and always says which project it's reporting on.
+    case "recap": {
+        const transcript = latestTranscript();
+        const recap = transcript ? extractRecap(transcript) : undefined;
+        if (!recap) {
+            console.log("No recent session found to recap.");
+            process.exitCode = 1;
+            break;
+        }
+        const spoken = withProjectPrefix(recap.text, projectName(recap.cwd));
+        detachSpeak("cli-recap", spoken, loadConfig());
+        console.log(spoken);
+        break;
+    }
     case "config":
         console.log(CONFIG_PATH);
         console.log(JSON.stringify(loadConfig(), null, 2));
@@ -67,6 +85,7 @@ switch (cmd) {
             "  claude-voice list            list TTS providers",
             "  claude-voice voices          list system voices",
             "  claude-voice test [text]     synthesize and play a phrase",
+            "  claude-voice recap           speak where the latest session stands",
             "  claude-voice config          show active config + its path",
             "  claude-voice mute [30m|2h|1d]  mute all audio (no duration = until unmute)",
             "  claude-voice unmute          lift a mute",

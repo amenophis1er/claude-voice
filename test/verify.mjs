@@ -1,5 +1,5 @@
 import assert from "node:assert";
-import { mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
@@ -25,6 +25,7 @@ import {
   throttled,
 } from "../src/speak.ts";
 import { clearMilestone, nextMilestone } from "../src/milestone.ts";
+import { extractRecap, latestTranscript } from "../src/recap.ts";
 
 // LEGACY: html-comment marker still parses for sessions on the old instruction
 assert.equal(
@@ -176,6 +177,55 @@ try {
 } finally {
   delete process.env.CLAUDE_VOICE_LOCK_DIR;
   rmSync(lockDir, { recursive: true, force: true });
+}
+
+// recap: away_summary wins while newest; a later assistant message supersedes it
+const recapDir = join(tmpdir(), `claude-voice-test-recap-${process.pid}`);
+mkdirSync(join(recapDir, "-Users-x-proj"), { recursive: true });
+const entry = (o) => JSON.stringify(o) + "\n";
+const older = join(recapDir, "-Users-x-proj", "old.jsonl");
+const newer = join(recapDir, "-Users-x-proj", "new.jsonl");
+try {
+  writeFileSync(
+    older,
+    entry({ type: "assistant", timestamp: "2026-08-03T10:00:00Z", cwd: "/Users/x/old-proj",
+      message: { content: [{ type: "text", text: "Old session. All old work is finished." }] } }),
+  );
+  writeFileSync(
+    newer,
+    entry({ type: "assistant", timestamp: "2026-08-03T11:00:00Z", cwd: "/Users/x/proj",
+      message: { content: [{ type: "text", text: "Deployed. The staging rollout is complete and healthy." }] } }) +
+    entry({ type: "system", subtype: "away_summary", timestamp: "2026-08-03T11:05:00Z",
+      content: "You asked me to roll out staging; done. Next: production. (disable recaps in /config)" }),
+  );
+  assert.equal(latestTranscript(recapDir), newer); // written after `older` → newest mtime
+  // recap entry is newest → spoken, chrome suffix stripped, cwd carried
+  let r = extractRecap(newer);
+  assert.equal(r.text, "You asked me to roll out staging; done. Next: production.");
+  assert.equal(r.cwd, "/Users/x/proj");
+  // session moves past the recap → the newer assistant ending wins instead
+  writeFileSync(
+    newer,
+    readFileSync(newer, "utf8") +
+      entry({ type: "assistant", timestamp: "2026-08-03T11:10:00Z", cwd: "/Users/x/proj",
+        message: { content: [{ type: "text", text: "Actually production is now rolled out too, all green." }] } }),
+  );
+  r = extractRecap(newer);
+  assert.equal(r.text, "Actually production is now rolled out too, all green.");
+  // a trailing tool-call lead-in ("Now the wiring:") is skipped for the last
+  // substantive remark
+  writeFileSync(
+    newer,
+    readFileSync(newer, "utf8") +
+      entry({ type: "assistant", timestamp: "2026-08-03T11:11:00Z",
+        message: { content: [{ type: "text", text: "Now the `wiring`:" }] } }),
+  );
+  assert.equal(extractRecap(newer).text, "Actually production is now rolled out too, all green.");
+  // no speakable content at all → undefined
+  writeFileSync(older, entry({ type: "user", message: { content: "hi" } }));
+  assert.equal(extractRecap(older), undefined);
+} finally {
+  rmSync(recapDir, { recursive: true, force: true });
 }
 
 console.log("ALL ASSERTIONS PASSED");

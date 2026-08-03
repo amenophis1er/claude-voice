@@ -125,7 +125,53 @@ npx @amenophis1er/claude-voice voices          # list system voices (try "Ava (P
 npx @amenophis1er/claude-voice test "Hello"    # hear the current voice right now
 npx @amenophis1er/claude-voice list            # list providers
 npx @amenophis1er/claude-voice config          # show active config + where it lives
+npx @amenophis1er/claude-voice recap           # speak where the latest session stands
 ```
+
+## On-demand recap (hotkey)
+
+`claude-voice recap` finds your most recently active Claude Code session and
+speaks where it stands — Claude Code's own idle recap when that's the newest
+word, otherwise the closing sentence of the last assistant message — prefixed
+with the project name. It speaks even while muted (you asked), which makes it
+perfect on a global hotkey: glance away from the screen, tap the key, hear the
+state of play.
+
+Claude Code's in-app keybindings can't run commands (and terminals can't even
+see a bare modifier tap), so bind it at the OS level. Double-tap **Right Ctrl**
+with [Karabiner-Elements](https://karabiner-elements.pqrs.org) (macOS):
+
+```json
+{
+  "description": "Double-tap Right Ctrl → speak Claude session recap",
+  "manipulators": [
+    {
+      "type": "basic",
+      "from": { "key_code": "right_control", "modifiers": { "optional": ["any"] } },
+      "conditions": [{ "type": "variable_if", "name": "rctrl_tap", "value": 1 }],
+      "to": [{ "shell_command": "/opt/homebrew/bin/node $HOME/.claude/voice/app/cli.js recap" }]
+    },
+    {
+      "type": "basic",
+      "from": { "key_code": "right_control", "modifiers": { "optional": ["any"] } },
+      "to": [
+        { "key_code": "right_control" },
+        { "set_variable": { "name": "rctrl_tap", "value": 1 } }
+      ],
+      "to_delayed_action": {
+        "to_if_invoked": [{ "set_variable": { "name": "rctrl_tap", "value": 0 } }],
+        "to_if_canceled": [{ "set_variable": { "name": "rctrl_tap", "value": 0 } }]
+      }
+    }
+  ]
+}
+```
+
+Adjust the `shell_command` for your setup: Karabiner runs with a minimal
+`PATH`, so use an absolute `node` path (`which node`), and point at
+`~/.claude/voice/app/cli.js` (npx install) or `<your clone>/src/cli.ts`
+(source install). Raycast, Hammerspoon, or skhd work just as well with a
+normal key combo.
 
 ## Configuration
 
