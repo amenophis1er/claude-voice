@@ -1,7 +1,7 @@
 #!/usr/bin/env node
-import { mkdirSync, writeFileSync } from "node:fs";
-import { createInterface } from "node:readline/promises";
+import { chmodSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
+import * as ui from "./ui.ts";
 import { CONFIG_PATH, loadConfig, type Preset, type VoiceConfig } from "./config.ts";
 import { listProviders } from "./providers/registry.ts";
 import { install, listSystemVoices, uninstall } from "./install.ts";
@@ -88,45 +88,127 @@ switch (cmd) {
 }
 
 async function init(): Promise<void> {
-  const rl = createInterface({ input: process.stdin, output: process.stdout });
-  const ask = async (q: string, def: string): Promise<string> =>
-    (await rl.question(`${q} [${def}]: `)).trim() || def;
+  ui.intro("claude-voice", "give Claude Code a voice — quiet by default");
 
-  console.log("\nclaude-voice setup — press Enter to accept the default.\n");
+  const preset = await ui.select<Preset>(
+    "How chatty should it be?",
+    [
+      { value: "summary", label: "summary", hint: "spoken wrap-up after substantial tasks — recommended" },
+      { value: "chimes", label: "chimes", hint: "sounds only, never speech" },
+      { value: "verbose", label: "verbose", hint: "speak after every task" },
+      { value: "silent", label: "silent", hint: "install now, enable later" },
+    ],
+    0,
+  );
 
-  const PRESETS: Preset[] = ["silent", "chimes", "summary", "verbose"];
-  const presetIn = await ask("Verbosity: silent | chimes | summary | verbose", "summary");
-  const preset: Preset = (PRESETS as string[]).includes(presetIn) ? (presetIn as Preset) : "summary";
-  if (preset !== presetIn) console.log(`  (unknown preset "${presetIn}" — using "summary")`);
+  const PROVIDER_HINTS: Record<string, string> = {
+    system: "no API key, works offline",
+    elevenlabs: "ElevenLabs — needs an API key",
+    openai: "OpenAI or any OpenAI-compatible server (Kokoro, LocalAI, …)",
+  };
+  const provider = await ui.select<string>(
+    "Voice provider",
+    listProviders().map((p) => ({
+      value: p.id,
+      label: p.id,
+      hint: PROVIDER_HINTS[p.id] ?? p.label,
+    })),
+    0,
+  );
 
-  console.log("\nProviders:");
-  for (const p of listProviders()) {
-    console.log(`  ${p.id}${p.zeroConfig ? " (no key)" : " (needs API key)"} — ${p.label}`);
+  // Merge over any existing config: re-running init must never clobber
+  // hand-edited fields (thresholds, quiet hours, provider extras).
+  let existing: Record<string, unknown> = {};
+  try {
+    existing = JSON.parse(readFileSync(CONFIG_PATH, "utf8"));
+  } catch {
+    /* first run */
   }
-  const provider = await ask("\nProvider", "system");
+  const options: Record<string, unknown> = { ...((existing.options as object) ?? {}) };
 
-  const voices = listSystemVoices();
-  if (provider === "system" && voices.length) {
-    console.log(`\n${voices.length} system voices (e.g. ${voices.slice(0, 6).join(", ")} …)`);
+  if (provider === "openai") {
+    let url = await ui.text("Endpoint URL", "blank = api.openai.com — any OpenAI-compatible server");
+    if (url) {
+      if (!/^https?:\/\//.test(url)) url = `https://${url}`; // scheme is easy to forget
+      const u = new URL(url);
+      if (u.pathname === "/" || u.pathname === "") u.pathname = "/v1"; // OpenAI-compatible convention
+      options.baseUrl = u.toString().replace(/\/+$/, "");
+      ui.step("Endpoint", String(options.baseUrl));
+    } else delete options.baseUrl;
   }
-  const voiceIn = await ask("Voice (blank = provider default)", "");
+  if (provider === "openai" || provider === "elevenlabs") {
+    const envVar = provider === "openai" ? "OPENAI_API_KEY" : "ELEVENLABS_API_KEY";
+    const current = options.api_key ? 1 : options.apiKeyCommand ? 2 : 0;
+    const keyMode = await ui.select<string>(
+      "API key",
+      [
+        { value: "env", label: `use $${envVar}`, hint: "already exported in your shell rc / profile" },
+        { value: "paste", label: "paste it now", hint: "stored in config.json (file mode 600)" },
+        { value: "cmd", label: "fetch via a command", hint: "e.g. op read op://vault/item/credential" },
+      ],
+      current,
+    );
+    delete options.api_key;
+    delete options.apiKeyCommand;
+    if (keyMode === "paste") {
+      options.api_key = await ui.text("Paste key", "input is kept, display is masked", (s) =>
+        s.length > 8 ? `${s.slice(0, 5)}…${s.slice(-3)}` : "•••",
+      );
+    } else if (keyMode === "cmd") {
+      options.apiKeyCommand = await ui.text("Command", "stdout must be the key");
+    }
+  }
 
-  const cfg: Partial<VoiceConfig> = { preset, provider };
-  if (voiceIn) cfg.voice = voiceIn;
+  let voice = "";
+  if (provider === "system") {
+    const voices = listSystemVoices();
+    if (voices.length) {
+      const curated = voices.slice(0, 7);
+      voice = await ui.select<string>(
+        "Voice",
+        [
+          { value: "", label: "system default" },
+          ...curated.map((v) => ({ value: v, label: v })),
+          { value: "__other__", label: "other…", hint: `${voices.length} installed — see \`claude-voice voices\`` },
+        ],
+        0,
+      );
+      if (voice === "__other__") voice = await ui.text("Voice name", "exactly as listed by `claude-voice voices`");
+    }
+  } else {
+    voice = await ui.text("Voice id", "blank = provider default");
+  }
 
+  const cfg: Partial<VoiceConfig> = { ...existing, preset, provider };
+  if (voice) cfg.voice = voice;
+  else delete (cfg as Record<string, unknown>).voice;
+  if (Object.keys(options).length) cfg.options = options;
+  else delete (cfg as Record<string, unknown>).options;
   mkdirSync(dirname(CONFIG_PATH), { recursive: true });
   writeFileSync(CONFIG_PATH, JSON.stringify(cfg, null, 2) + "\n");
-  console.log(`\nWrote ${CONFIG_PATH}`);
+  chmodSync(CONFIG_PATH, 0o600); // may hold an api_key
 
-  const doInstall = (await ask("Install hooks into ~/.claude/settings.json now? (y/n)", "y")).toLowerCase();
-  if (doInstall.startsWith("y")) console.log("Installed →", install());
-  else console.log("Skipped. Run `claude-voice install` later.");
+  const doInstall = await ui.confirm("Wire the hooks into ~/.claude/settings.json?", true);
+  if (doInstall) {
+    const s = ui.spinner("Wiring hooks");
+    const where = install();
+    s.stop(`Hooks wired ${ui.dim(`(${where})`)}`);
+  } else {
+    ui.step("Hooks", "skipped — run `claude-voice install` later");
+  }
 
-  const demo = (await ask("Play a test phrase? (y/n)", "y")).toLowerCase();
-  rl.close();
-  if (demo.startsWith("y")) {
+  if (await ui.confirm("Play a test phrase now?", true)) {
     detachChime("cli-test", "done");
     detachSpeak("cli-test", "Claude voice is ready.", loadConfig());
+    ui.step("Test", "playing…");
   }
-  console.log("\nDone. Restart Claude Code to load the hooks.");
+
+  ui.close();
+  ui.outro([
+    `${ui.bold("Next:")} restart Claude Code — hooks load at startup.`,
+    `${ui.dim("Then give it a real task; short replies stay silent on purpose.")}`,
+    "",
+    `${ui.cyan("/claude-voice")} ${ui.dim("mute 1h · unmute · status   (inside Claude Code)")}`,
+    `${ui.dim("config:")} ${CONFIG_PATH}`,
+  ]);
 }

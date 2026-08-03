@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.4.0 — 2026-08-03
+
+- **Redesigned `init`:** arrow-key menus, styled steps, spinner, and a proper
+  outro — zero dependencies, hand-rolled UI, with a plain numbered-prompt
+  fallback when not in a TTY (pipes, CI).
+- `init` now walks cloud providers through endpoint + API key setup: custom
+  OpenAI-compatible endpoint URL (normalized: https:// and /v1 added when
+  missing), and a key method choice — env var, paste (stored in config.json,
+  chmod 600, masked on screen), or a fetch command (op read, security, pass).
+- Re-running `init` merges with the existing config instead of overwriting it —
+  hand-edited fields (thresholds, quiet hours, provider extras) survive.
+
 ## 0.3.0 — 2026-08-03
 
 - **Bring your own TTS:** the `openai` provider accepts `options.baseUrl` and
