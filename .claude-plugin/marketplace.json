@@ -1,0 +1,11 @@
+{
+  "name": "claude-voice",
+  "owner": { "name": "Amen" },
+  "plugins": [
+    {
+      "name": "claude-voice",
+      "source": "./",
+      "description": "Give Claude Code a voice — selective, tasteful spoken summaries and attention cues. Quiet by default."
+    }
+  ]
+}
