@@ -5,9 +5,15 @@ import type { SynthesizeInput, SynthesizeResult, TtsProvider } from "./types.ts"
 
 const DEFAULT_VOICE = "nova";
 const DEFAULT_MODEL = "gpt-4o-mini-tts";
+const DEFAULT_BASE_URL = "https://api.openai.com/v1";
 
 /**
  * OpenAI TTS — good quality, single OPENAI_API_KEY. Opt-in upgrade.
+ *
+ * Also speaks to any OpenAI-compatible endpoint (Kokoro, LocalAI, self-hosted)
+ * via options.baseUrl. With a custom baseUrl the `model` field is only sent
+ * when options.model is set — the server's default model is usually correct,
+ * and OpenAI's model names would be rejected.
  */
 export const openAiProvider: TtsProvider = {
   id: "openai",
@@ -19,15 +25,19 @@ export const openAiProvider: TtsProvider = {
     if (!apiKey)
       throw new Error("no OpenAI key: set OPENAI_API_KEY, or api_key / apiKeyCommand in options");
 
-    const res = await fetch("https://api.openai.com/v1/audio/speech", {
+    const baseUrl = ((input.options?.baseUrl as string) ?? DEFAULT_BASE_URL).replace(/\/+$/, "");
+    const custom = baseUrl !== DEFAULT_BASE_URL;
+    const model = (input.options?.model as string) ?? (custom ? undefined : DEFAULT_MODEL);
+
+    const res = await fetch(`${baseUrl}/audio/speech`, {
       method: "POST",
       headers: {
         authorization: `Bearer ${apiKey}`,
         "content-type": "application/json",
       },
       body: JSON.stringify({
-        model: (input.options?.model as string) ?? DEFAULT_MODEL,
-        voice: input.voice ?? DEFAULT_VOICE,
+        ...(model ? { model } : {}),
+        ...(input.voice || !custom ? { voice: input.voice ?? DEFAULT_VOICE } : {}),
         input: input.text,
         response_format: "mp3",
         speed: input.rate ?? 1,

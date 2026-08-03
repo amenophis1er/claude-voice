@@ -79,6 +79,21 @@ API keys, works offline. Two opt-in upgrades:
 | `elevenlabs` | best | `ELEVENLABS_API_KEY` in your environment |
 | `openai` | great | `OPENAI_API_KEY` in your environment |
 
+**Bring your own TTS:** the `openai` provider works with any OpenAI-compatible
+endpoint (Kokoro, LocalAI, a self-hosted server) — set `options.baseUrl` and
+your key, and pick a voice your server knows:
+
+```json
+{
+  "provider": "openai",
+  "voice": "af_bella",
+  "options": { "baseUrl": "https://tts.example.com/v1", "apiKeyCommand": "…" }
+}
+```
+
+With a custom `baseUrl`, `model` is only sent if you set `options.model` —
+your server's default is usually right.
+
 If a cloud provider fails (no key, network down, timeout), it falls back to the
 system voice automatically — you still hear your summary.
 

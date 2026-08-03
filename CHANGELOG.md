@@ -1,7 +1,10 @@
 # Changelog
 
-## 0.3.0 — 2026-08-02
+## 0.3.0 — 2026-08-03
 
+- **Bring your own TTS:** the `openai` provider accepts `options.baseUrl` and
+  speaks to any OpenAI-compatible endpoint (Kokoro, LocalAI, self-hosted).
+  With a custom base URL, `model` is only sent when explicitly configured.
 - **API keys from secret managers:** cloud providers now resolve their key as
   env var → `options.api_key` → `options.apiKeyCommand` (a shell command whose
   stdout is the key, e.g. 1Password's `op read`). Hooks run outside your shell
