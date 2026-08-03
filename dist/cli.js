@@ -5,9 +5,27 @@ import { dirname } from "node:path";
 import { CONFIG_PATH, loadConfig } from "./config.js";
 import { listProviders } from "./providers/registry.js";
 import { install, listSystemVoices, uninstall } from "./install.js";
+import { mute, muteStatus, unmute } from "./mute.js";
 import { detachChime, detachSpeak } from "./speak.js";
 const cmd = process.argv[2];
 switch (cmd) {
+    case "mute":
+        try {
+            console.log(mute(process.argv[3]));
+        }
+        catch (err) {
+            console.error(err.message);
+            process.exitCode = 1;
+        }
+        break;
+    case "unmute":
+        console.log(unmute());
+        break;
+    case "status": {
+        const c = loadConfig();
+        console.log(`preset: ${c.preset} · provider: ${c.provider} · ${muteStatus()}`);
+        break;
+    }
     case "list":
         for (const p of listProviders()) {
             console.log(`${p.id.padEnd(12)} ${p.zeroConfig ? "•" : " "}  ${p.label}`);
@@ -50,6 +68,9 @@ switch (cmd) {
             "  claude-voice voices          list system voices",
             "  claude-voice test [text]     synthesize and play a phrase",
             "  claude-voice config          show active config + its path",
+            "  claude-voice mute [30m|2h|1d]  mute all audio (no duration = until unmute)",
+            "  claude-voice unmute          lift a mute",
+            "  claude-voice status          preset, provider, mute state",
         ].join("\n"));
 }
 async function init() {

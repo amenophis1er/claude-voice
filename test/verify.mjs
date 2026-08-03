@@ -5,6 +5,7 @@ import {
   sanitizeForSpeech,
   clampSpokenLength,
 } from "../src/sanitize.ts";
+import { parseDurationMs } from "../src/mute.ts";
 import { readLastTurn } from "../src/transcript.ts";
 import { policyFor } from "../src/config.ts";
 
@@ -53,6 +54,14 @@ const fixture = new URL("./fixtures/transcript.jsonl", import.meta.url).pathname
 const t = readLastTurn(fixture);
 assert.equal(t.toolCalls, 3);
 assert.ok(t.durationSeconds >= 40, `dur=${t.durationSeconds}`);
+
+// mute duration parsing
+assert.equal(parseDurationMs("30m"), 30 * 60_000);
+assert.equal(parseDurationMs("2h"), 2 * 3_600_000);
+assert.equal(parseDurationMs("1d"), 86_400_000);
+assert.equal(parseDurationMs(undefined), null); // indefinite
+assert.throws(() => parseDurationMs("soon"));
+assert.throws(() => parseDurationMs("10x"));
 
 // preset policies
 assert.equal(policyFor("silent").speakSummary, false);

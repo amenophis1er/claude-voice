@@ -10,6 +10,7 @@ import {
   markSpoken,
   throttled,
 } from "./speak.ts";
+import { muted } from "./mute.ts";
 import { clampSpokenLength, extractClosingSentence, extractVoiceMarker, sanitizeForSpeech } from "./sanitize.ts";
 import { readLastTurn } from "./transcript.ts";
 
@@ -89,8 +90,12 @@ async function main() {
   }
 }
 
-/** Quiet-hours + focus muting, shared by stop/notification. */
+/** Purposeful mute + quiet hours + focus muting, shared by stop/notification. */
 function silenced(cfg: VoiceConfig): boolean {
+  if (muted()) {
+    logDebug("silenced: muted on purpose");
+    return true;
+  }
   if (inQuietHours(cfg)) {
     logDebug("silenced: quiet hours");
     return true;

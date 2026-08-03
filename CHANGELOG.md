@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.2.0 — 2026-08-02
+
+- **Purposeful mute:** `claude-voice mute [30m|2h|1d]` / `unmute` / `status`,
+  plus a `/voice` slash command installed alongside the hooks (and shipped in
+  the plugin). A mute is global across sessions, survives restarts, and expires
+  automatically when given a duration.
+
 ## 0.1.0 — 2026-08-02
 
 First tagged release.

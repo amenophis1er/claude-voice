@@ -9,6 +9,7 @@ const COMPILED = import.meta.url.endsWith(".js");
 /** Stable home for the vendored runtime — survives npx cache eviction and nvm switches. */
 export const APP_DIR = join(homedir(), ".claude", "voice", "app");
 const SETTINGS = join(homedir(), ".claude", "settings.json");
+const COMMAND_FILE = join(homedir(), ".claude", "commands", "voice.md");
 /** event → the dispatch subcommand + whether it must run async (non-blocking). */
 const WIRING = [
     ["SessionStart", "instructions", false], // sync: stdout injects context
@@ -47,7 +48,26 @@ export function install() {
         groups.push({ hooks: [hook] });
     }
     writeSettings(settings);
+    writeCommandFile(dirname(dispatch));
     return SETTINGS;
+}
+/**
+ * /voice slash command: mute, unmute, status — one file in ~/.claude/commands.
+ * The npx/plugin double-install guard doesn't apply here: plugin installs ship
+ * their own commands/voice.md, and Claude Code namespaces those separately.
+ */
+function writeCommandFile(appDir) {
+    const cli = join(appDir, COMPILED ? "cli.js" : "cli.ts");
+    mkdirSync(dirname(COMMAND_FILE), { recursive: true });
+    writeFileSync(COMMAND_FILE, [
+        "---",
+        "description: Control claude-voice — mute [30m|2h|1d], unmute, status",
+        "---",
+        "",
+        `Run this via Bash: \`node "${cli}" $ARGUMENTS\``,
+        "(no arguments → run `status`). Relay its one-line output back verbatim, nothing else.",
+        "",
+    ].join("\n"));
 }
 /** Remove our hooks from settings.json and the vendored runtime. */
 export function uninstall() {
@@ -60,6 +80,7 @@ export function uninstall() {
     }
     writeSettings(settings);
     rmSync(APP_DIR, { recursive: true, force: true }); // config.json is kept
+    rmSync(COMMAND_FILE, { force: true });
     return SETTINGS;
 }
 /** Matches both dev (dispatch.ts) and vendored (dispatch.js) hook commands. */

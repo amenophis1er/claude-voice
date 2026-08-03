@@ -124,6 +124,27 @@ npx @amenophis1er/claude-voice config          # show active config + where it l
 Edit the file directly or rerun `npx @amenophis1er/claude-voice init` — changes apply on the
 next task, no restart needed.
 
+## Muting on purpose
+
+Sometimes you want silence *now* — a call, a screen share, pairing. Three ways,
+all equivalent:
+
+```
+/voice mute 1h        # inside Claude Code (slash command, installed with the hooks)
+/voice unmute
+/voice status
+```
+
+```bash
+npx @amenophis1er/claude-voice mute 2h    # or: mute 30m, mute 1d, mute (= until unmute)
+npx @amenophis1er/claude-voice unmute
+```
+
+A mute is **global** (all sessions — mute means the room goes quiet), survives
+restarts, and expires on its own when given a duration. This is separate from
+the *automatic* silencers: `quietHours` (config) and `speakOnlyWhenUnfocused`
+(speak only when the terminal isn't the frontmost app).
+
 ## Nice to know
 
 - **Parallel sessions don't fight:** state is per-session, so two Claude Code

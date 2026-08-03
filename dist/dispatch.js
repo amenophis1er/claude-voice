@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import { loadConfig, policyFor } from "./config.js";
 import { mutedByFocus } from "./focus.js";
 import { detachChime, detachSpeak, interrupt, logDebug, markSpoken, throttled, } from "./speak.js";
+import { muted } from "./mute.js";
 import { clampSpokenLength, extractClosingSentence, extractVoiceMarker, sanitizeForSpeech } from "./sanitize.js";
 import { readLastTurn } from "./transcript.js";
 /**
@@ -75,8 +76,12 @@ async function main() {
             process.stderr.write(`[claude-voice] unknown event: ${event}\n`);
     }
 }
-/** Quiet-hours + focus muting, shared by stop/notification. */
+/** Purposeful mute + quiet hours + focus muting, shared by stop/notification. */
 function silenced(cfg) {
+    if (muted()) {
+        logDebug("silenced: muted on purpose");
+        return true;
+    }
     if (inQuietHours(cfg)) {
         logDebug("silenced: quiet hours");
         return true;
