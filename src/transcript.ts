@@ -23,10 +23,13 @@ export function readLastTurn(transcriptPath: string): TurnStats | undefined {
   }
 
   const entries = lines.map(safeParse).filter(Boolean) as any[];
-  // Find the boundary of the current turn: everything after the last user msg.
+  // Find the boundary of the current turn: everything after the last HUMAN
+  // message. Tool results also arrive as type:"user" entries in the transcript,
+  // so a plain type check would clip the turn to the tail after the last tool
+  // call and undercount everything.
   let start = 0;
   for (let i = entries.length - 1; i >= 0; i--) {
-    if (entries[i]?.type === "user") {
+    if (isHumanPrompt(entries[i])) {
       start = i + 1;
       break;
     }
@@ -53,6 +56,17 @@ export function readLastTurn(transcriptPath: string): TurnStats | undefined {
     stamps.length >= 2 ? (Math.max(...stamps) - Math.min(...stamps)) / 1000 : 0;
 
   return { lastAssistantText, toolCalls, durationSeconds };
+}
+
+/** A type:"user" entry typed by the human, as opposed to a wrapped tool_result. */
+function isHumanPrompt(e: any): boolean {
+  if (e?.type !== "user") return false;
+  const c = e?.message?.content;
+  if (typeof c === "string") return true;
+  if (!Array.isArray(c)) return false;
+  return (
+    c.some((b: any) => b?.type === "text") && !c.some((b: any) => b?.type === "tool_result")
+  );
 }
 
 function safeParse(line: string): unknown {
