@@ -7,8 +7,10 @@ const DEFAULTS = {
     rate: 1,
     options: {},
     throttleSeconds: 20,
+    milestoneIntervalSeconds: 60,
     substantial: { minToolCalls: 3, minDurationSeconds: 15 },
     speakOnlyWhenUnfocused: false,
+    announceProject: "auto",
 };
 export const CONFIG_PATH = join(homedir(), ".claude", "voice", "config.json");
 export function loadConfig() {

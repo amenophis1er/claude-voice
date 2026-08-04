@@ -4,6 +4,9 @@ import { join } from "node:path";
 
 export type Preset = "silent" | "chimes" | "summary" | "verbose";
 
+/** Prefix spoken audio with the project (cwd) name. "auto" = only while other sessions are active. */
+export type AnnounceProject = "always" | "auto" | "off";
+
 export interface VoiceConfig {
   /** One knob controls how much is spoken. Default: "summary". */
   preset: Preset;
@@ -14,12 +17,16 @@ export interface VoiceConfig {
   options: Record<string, unknown>;
   /** Min seconds between two spoken task-end summaries. */
   throttleSeconds: number;
+  /** Min seconds between two spoken mid-task milestones (verbose preset). */
+  milestoneIntervalSeconds: number;
   /** A task must clear one of these to count as "substantial" and be summarized. */
   substantial: { minToolCalls: number; minDurationSeconds: number };
   /** Optional quiet hours in 24h local time, e.g. { start: 22, end: 8 }. */
   quietHours?: { start: number; end: number };
   /** Only speak/chime when the terminal is NOT the focused app (macOS only). */
   speakOnlyWhenUnfocused: boolean;
+  /** Say which project is talking, so parallel sessions are tellable apart. */
+  announceProject: AnnounceProject;
 }
 
 const DEFAULTS: VoiceConfig = {
@@ -28,8 +35,10 @@ const DEFAULTS: VoiceConfig = {
   rate: 1,
   options: {},
   throttleSeconds: 20,
+  milestoneIntervalSeconds: 60,
   substantial: { minToolCalls: 3, minDurationSeconds: 15 },
   speakOnlyWhenUnfocused: false,
+  announceProject: "auto",
 };
 
 export const CONFIG_PATH = join(homedir(), ".claude", "voice", "config.json");

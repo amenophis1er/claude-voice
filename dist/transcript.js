@@ -29,6 +29,7 @@ export function readLastTurn(transcriptPath) {
     }
     const turn = entries.slice(start);
     let lastAssistantText = "";
+    let lastAssistantTs;
     let toolCalls = 0;
     const stamps = [];
     for (const e of turn) {
@@ -41,13 +42,15 @@ export function readLastTurn(transcriptPath) {
         for (const block of content) {
             if (block?.type === "tool_use")
                 toolCalls++;
-            if (block?.type === "text" && e?.type === "assistant") {
-                lastAssistantText = block.text ?? lastAssistantText;
+            if (block?.type === "text" && e?.type === "assistant" && block.text) {
+                lastAssistantText = block.text;
+                if (!Number.isNaN(t))
+                    lastAssistantTs = t;
             }
         }
     }
     const durationSeconds = stamps.length >= 2 ? (Math.max(...stamps) - Math.min(...stamps)) / 1000 : 0;
-    return { lastAssistantText, toolCalls, durationSeconds };
+    return { lastAssistantText, lastAssistantTs, toolCalls, durationSeconds };
 }
 /** A type:"user" entry typed by the human, as opposed to a wrapped tool_result. */
 function isHumanPrompt(e) {

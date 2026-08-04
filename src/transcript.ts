@@ -2,6 +2,8 @@ import { readFileSync } from "node:fs";
 
 interface TurnStats {
   lastAssistantText: string;
+  /** Epoch ms of the entry carrying lastAssistantText — freshness gate for milestones. */
+  lastAssistantTs?: number;
   toolCalls: number;
   durationSeconds: number;
 }
@@ -37,6 +39,7 @@ export function readLastTurn(transcriptPath: string): TurnStats | undefined {
   const turn = entries.slice(start);
 
   let lastAssistantText = "";
+  let lastAssistantTs: number | undefined;
   let toolCalls = 0;
   const stamps: number[] = [];
   for (const e of turn) {
@@ -46,8 +49,9 @@ export function readLastTurn(transcriptPath: string): TurnStats | undefined {
     if (!Array.isArray(content)) continue;
     for (const block of content) {
       if (block?.type === "tool_use") toolCalls++;
-      if (block?.type === "text" && e?.type === "assistant") {
-        lastAssistantText = block.text ?? lastAssistantText;
+      if (block?.type === "text" && e?.type === "assistant" && block.text) {
+        lastAssistantText = block.text;
+        if (!Number.isNaN(t)) lastAssistantTs = t;
       }
     }
   }
@@ -55,7 +59,7 @@ export function readLastTurn(transcriptPath: string): TurnStats | undefined {
   const durationSeconds =
     stamps.length >= 2 ? (Math.max(...stamps) - Math.min(...stamps)) / 1000 : 0;
 
-  return { lastAssistantText, toolCalls, durationSeconds };
+  return { lastAssistantText, lastAssistantTs, toolCalls, durationSeconds };
 }
 
 /** A type:"user" entry typed by the human, as opposed to a wrapped tool_result. */

@@ -18,6 +18,8 @@ const WIRING = [
     ["UserPromptSubmit", "prompt-submit", false], // sync: fast interrupt
     ["Stop", "stop", true],
     ["Notification", "notification", true],
+    ["PostToolUse", "milestone", true], // verbose preset's mid-task narration
+    ["SessionEnd", "session-end", false], // sync: just unlinks the heartbeat file
 ];
 /**
  * Where the hooks should point. Compiled (npx / npm install): vendor the whole

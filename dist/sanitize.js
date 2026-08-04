@@ -48,15 +48,27 @@ export function sanitizeForSpeech(text) {
         .replace(/!?\[([^\]]*)\]\([^)]*\)/g, "$1") // links/images → label
         .replace(/https?:\/\/\S+/g, " ") // bare URLs
         .replace(/\B(?:~|\.{0,2})\/[^\s)]+/g, " ") // file paths
+        .replace(/\b\d{1,3}(?:\.\d{1,3}){3}(?::\d+)?\b/g, " ") // IP addresses
         .replace(/[#*_>|]/g, " ") // markdown punctuation
+        .replace(/\(\s*[,;:\s]*\)/g, " ") // parens left holding only punctuation
         .replace(/\s+/g, " ")
         .trim();
 }
-/** Guard against reading a whole essay aloud when a marker is missing. */
+/**
+ * Guard against reading a whole essay aloud when a marker is missing.
+ * Degrades gracefully: end on a sentence if one fits, else a clause, else a
+ * word — never a mid-word chop ("flagged i"), which sounds like the voice died.
+ */
 export function clampSpokenLength(text, maxChars = 350) {
     if (text.length <= maxChars)
         return text;
     const cut = text.slice(0, maxChars);
-    const lastStop = Math.max(cut.lastIndexOf(". "), cut.lastIndexOf("! "));
-    return (lastStop > 80 ? cut.slice(0, lastStop + 1) : cut).trim();
+    const sentence = Math.max(cut.lastIndexOf(". "), cut.lastIndexOf("! "), cut.lastIndexOf("? "));
+    if (sentence > 80)
+        return cut.slice(0, sentence + 1).trim();
+    const clause = Math.max(cut.lastIndexOf(", "), cut.lastIndexOf("; "), cut.lastIndexOf(" — "));
+    if (clause > 80)
+        return cut.slice(0, clause).trim();
+    const word = cut.lastIndexOf(" ");
+    return (word > 0 ? cut.slice(0, word) : cut).trim();
 }

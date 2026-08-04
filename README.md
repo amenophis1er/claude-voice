@@ -59,10 +59,20 @@ One knob controls everything — the `preset`:
 | `silent` | — | — | — |
 | `chimes` | chime | chime | — |
 | **`summary`** (default) | chime + spoken | spoken summary, *substantial tasks only* | — |
-| `verbose` | chime + spoken | spoken summary, always | milestones *(roadmap)* |
+| `verbose` | chime + spoken | spoken summary, always | spoken milestones |
 
 "Substantial" means the task crossed a threshold (default: 3 tool calls or 15
 seconds). Quick back-and-forth stays silent — that's the tasteful part.
+
+**Milestones** (`verbose` only): during a long task, Claude's short progress
+remarks ("Now turning both old copies into pointer stubs.") are spoken so you
+can follow along from across the room — only once the task is already
+substantial, at most one per minute, never repeating itself, and never talking
+over other audio. Milestones are also *perishable*: a remark older than two
+intervals is never spoken (during long agent runs the last remark can sit
+unchanged for minutes), and if the speaker is busy a milestone is dropped, not
+queued — a delayed glance is a wrong glance. The task-end summary always wins:
+it cuts a still-playing milestone.
 
 The summary you hear isn't a robotic read-back: Claude is taught (via a session
 instruction the hooks inject) to end real tasks with one natural, speakable
@@ -118,7 +128,68 @@ npx @amenophis1er/claude-voice voices          # list system voices (try "Ava (P
 npx @amenophis1er/claude-voice test "Hello"    # hear the current voice right now
 npx @amenophis1er/claude-voice list            # list providers
 npx @amenophis1er/claude-voice config          # show active config + where it lives
+npx @amenophis1er/claude-voice recap           # speak where the latest session stands
 ```
+
+## On-demand recap (hotkey)
+
+`claude-voice recap` finds your most recently active Claude Code session and
+speaks where it stands — Claude Code's own idle recap when that's the newest
+word, otherwise the closing sentence of the last assistant message — prefixed
+with the project name. It speaks even while muted (you asked), which makes it
+perfect on a global hotkey: glance away from the screen, tap the key, hear the
+state of play.
+
+Claude Code's in-app keybindings can't run commands (and terminals can't even
+see a bare modifier tap), so bind it at the OS level.
+
+**macOS, zero extra installs** — generate a ready-made Shortcut:
+
+```bash
+npx @amenophis1er/claude-voice shortcut
+```
+
+This builds the Shortcuts workflow with your machine's real paths, signs it
+locally (macOS refuses unsigned shortcut files), and opens the import dialog.
+Click *Add Shortcut*, then in the shortcut's ⓘ details panel assign a global
+hotkey — ⌃⌥V is a safe, mnemonic choice (avoid ⌃⌥R: Claude Code uses it for
+prompt search). The hotkey itself can't ship in the file; Apple stores those
+per device.
+
+**Prefer a double-tap gesture?** Double-tap **Right Ctrl** with
+[Karabiner-Elements](https://karabiner-elements.pqrs.org) (macOS):
+
+```json
+{
+  "description": "Double-tap Right Ctrl → speak Claude session recap",
+  "manipulators": [
+    {
+      "type": "basic",
+      "from": { "key_code": "right_control", "modifiers": { "optional": ["any"] } },
+      "conditions": [{ "type": "variable_if", "name": "rctrl_tap", "value": 1 }],
+      "to": [{ "shell_command": "/opt/homebrew/bin/node $HOME/.claude/voice/app/cli.js recap" }]
+    },
+    {
+      "type": "basic",
+      "from": { "key_code": "right_control", "modifiers": { "optional": ["any"] } },
+      "to": [
+        { "key_code": "right_control" },
+        { "set_variable": { "name": "rctrl_tap", "value": 1 } }
+      ],
+      "to_delayed_action": {
+        "to_if_invoked": [{ "set_variable": { "name": "rctrl_tap", "value": 0 } }],
+        "to_if_canceled": [{ "set_variable": { "name": "rctrl_tap", "value": 0 } }]
+      }
+    }
+  ]
+}
+```
+
+Adjust the `shell_command` for your setup: Karabiner runs with a minimal
+`PATH`, so use an absolute `node` path (`which node`), and point at
+`~/.claude/voice/app/cli.js` (npx install) or `<your clone>/src/cli.ts`
+(source install). Raycast, Hammerspoon, or skhd work just as well with a
+normal key combo.
 
 ## Configuration
 
@@ -132,8 +203,10 @@ npx @amenophis1er/claude-voice config          # show active config + where it l
   "rate": 1,
   "options": {},
   "throttleSeconds": 20,
+  "milestoneIntervalSeconds": 60,
   "substantial": { "minToolCalls": 3, "minDurationSeconds": 15 },
   "speakOnlyWhenUnfocused": false,
+  "announceProject": "auto",
   "quietHours": { "start": 22, "end": 8 }
 }
 ```
@@ -146,8 +219,10 @@ npx @amenophis1er/claude-voice config          # show active config + where it l
 | `rate` | Speech speed, `1` = normal. |
 | `options` | Free-form provider extras, e.g. `{ "model_id": "eleven_turbo_v2_5" }`. |
 | `throttleSeconds` | Minimum gap between two spoken summaries in one session. |
+| `milestoneIntervalSeconds` | Minimum gap between two spoken milestones (`verbose`). |
 | `substantial` | A task must clear **one** threshold to be summarized. |
 | `speakOnlyWhenUnfocused` | Speak only when your terminal is **not** the frontmost app (macOS). |
+| `announceProject` | Prefix audio with the project folder name ("claude voice: Task complete."). `"auto"` = only while other sessions are active; `"always"`; `"off"`. |
 | `quietHours` | 24h local time; wraps midnight (`22 → 8` means 10pm–8am). |
 
 Edit the file directly or rerun `npx @amenophis1er/claude-voice init` — changes apply on the
@@ -180,12 +255,22 @@ the *automatic* silencers: `quietHours` (config) and `speakOnlyWhenUnfocused`
 
 - **Parallel sessions don't fight:** state is per-session, so two Claude Code
   windows won't interrupt or throttle each other.
+- **You can tell sessions apart:** while more than one session is running,
+  spoken audio is prefixed with the project folder name — "claude voice: Task
+  complete." — so you know which window is talking (`announceProject`).
 - **It shuts up when you type:** submitting a new prompt instantly kills any
   audio still playing.
 - **It never stalls Claude:** hooks are async and audio plays in a detached
   worker process.
+- **One voice at a time:** playback is serialized machine-wide — a milestone,
+  a notification, and another session's summary queue up instead of talking
+  over each other. (Synthesis still runs in parallel; only the speaker is
+  exclusive.)
 - **Notification cues are tailored:** permission prompt, idle, needs-input, and
   task-complete each get an appropriate phrase.
+- **No stale "Claude is waiting for you":** the idle nudge is skipped for 10
+  minutes after a spoken summary — you already heard the job is done. A
+  *silent* finish (trivial reply, unheard question) still gets the nudge.
 
 ## Troubleshooting
 
@@ -237,7 +322,7 @@ Audio I/O is kept at the edges.
 
 ### How it works
 
-Four Claude Code hooks share one dispatcher (`src/dispatch.ts`):
+Six Claude Code hooks share one dispatcher (`src/dispatch.ts`):
 
 - **`SessionStart`** injects an instruction teaching Claude to end substantial
   tasks with one natural, speakable closing sentence (visible prose — an
@@ -249,7 +334,17 @@ Four Claude Code hooks share one dispatcher (`src/dispatch.ts`):
   the instruction, the same extraction degrades to a cleaned tail of the
   message.
 - **`Notification`** chimes/speaks a cue tailored to the notification type.
+  An `idle_prompt` is dropped while the session's last spoken summary is
+  fresh (10 min) — it would just repeat, less accurately, what was said.
 - **`UserPromptSubmit`** kills all in-flight audio for the session.
+- **`PostToolUse`** (verbose preset) speaks Claude's latest progress remark as
+  a mid-task milestone, gated hard: turn already substantial, no audio
+  currently playing, minimum interval, no repeats. The remark is read from the
+  transcript best-effort — if the internal format changes, milestones degrade
+  to silence, never to wrong speech.
+- **`SessionEnd`** removes the session's heartbeat file. Every other event
+  refreshes it; `announceProject: "auto"` prefixes spoken text with the
+  project name only while another session's heartbeat is fresh (< 30 min).
 
 Substantiality is measured best-effort from the transcript JSONL (tool calls +
 duration since the last *human* message — tool results also arrive as

@@ -7,6 +7,9 @@ import { listProviders } from "./providers/registry.ts";
 import { install, listSystemVoices, uninstall } from "./install.ts";
 import { mute, muteStatus, unmute } from "./mute.ts";
 import { detachChime, detachSpeak } from "./speak.ts";
+import { extractRecap, latestTranscript } from "./recap.ts";
+import { createRecapShortcut } from "./shortcut.ts";
+import { projectName, withProjectPrefix } from "./announce.ts";
 
 const cmd = process.argv[2];
 
@@ -51,6 +54,36 @@ switch (cmd) {
     break;
   }
 
+  // Speak where the most recent session stands — made to hang off an OS-level
+  // hotkey (see README). Explicitly invoked, so it speaks even while muted,
+  // and always says which project it's reporting on.
+  case "recap": {
+    const transcript = latestTranscript();
+    const recap = transcript ? extractRecap(transcript) : undefined;
+    if (!recap) {
+      console.log("No recent session found to recap.");
+      process.exitCode = 1;
+      break;
+    }
+    const spoken = withProjectPrefix(recap.text, projectName(recap.cwd));
+    detachSpeak("cli-recap", spoken, loadConfig());
+    console.log(spoken);
+    break;
+  }
+
+  case "shortcut": {
+    try {
+      const file = createRecapShortcut();
+      console.log(`Opened ${file}`);
+      console.log('Click "Add Shortcut", then in its ⓘ details panel: Add Keyboard Shortcut → e.g. ⌃⌥V.');
+      console.log("(macOS stores hotkeys per device, so that last step can't be automated.)");
+    } catch (err) {
+      console.error((err as Error).message);
+      process.exitCode = 1;
+    }
+    break;
+  }
+
   case "config":
     console.log(CONFIG_PATH);
     console.log(JSON.stringify(loadConfig(), null, 2));
@@ -79,6 +112,8 @@ switch (cmd) {
         "  claude-voice list            list TTS providers",
         "  claude-voice voices          list system voices",
         "  claude-voice test [text]     synthesize and play a phrase",
+        "  claude-voice recap           speak where the latest session stands",
+        "  claude-voice shortcut        macOS: generate a hotkey-ready Shortcut for recap",
         "  claude-voice config          show active config + its path",
         "  claude-voice mute [30m|2h|1d]  mute all audio (no duration = until unmute)",
         "  claude-voice unmute          lift a mute",
@@ -95,7 +130,7 @@ async function init(): Promise<void> {
     [
       { value: "summary", label: "summary", hint: "spoken wrap-up after substantial tasks — recommended" },
       { value: "chimes", label: "chimes", hint: "sounds only, never speech" },
-      { value: "verbose", label: "verbose", hint: "speak after every task" },
+      { value: "verbose", label: "verbose", hint: "speak after every task + mid-task milestones" },
       { value: "silent", label: "silent", hint: "install now, enable later" },
     ],
     0,

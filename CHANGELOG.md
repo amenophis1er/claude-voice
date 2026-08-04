@@ -1,5 +1,48 @@
 # Changelog
 
+## 0.5.0 — 2026-08-03
+
+- **Tell parallel sessions apart:** spoken audio can be prefixed with the
+  project folder name — "claude voice: Task complete." — so with several
+  Claude Code sessions open you know which one is talking. New
+  `announceProject` config: `"auto"` (default — prefix only while another
+  session is active, tracked via per-session heartbeat files), `"always"`,
+  or `"off"`. Adds a `SessionEnd` hook that unregisters sessions promptly.
+- **Milestones are real now:** the `verbose` preset's promised mid-task
+  narration is implemented — a new `PostToolUse` hook speaks Claude's latest
+  short progress remark during long tasks. Heavily gated to stay tasteful:
+  only once the turn is already substantial, never while other audio plays,
+  at most one per `milestoneIntervalSeconds` (default 60), never the same
+  remark twice, and the task-end summary interrupts a still-playing milestone.
+  Milestones are perishable: remarks older than two intervals are never spoken
+  (they'd narrate the distant past during long agent runs), and when the
+  speaker is busy a milestone is dropped rather than queued.
+- **ElevenLabs now honors `rate`:** the config field was documented for all
+  providers but silently ignored by ElevenLabs; it now maps to
+  `voice_settings.speed` (clamped to the API's 0.7–1.2 range).
+- **One voice at a time:** audio playback is now serialized machine-wide via
+  a lock (stale holders are detected by pid and stolen), so concurrent jobs —
+  milestone + notification, or two sessions finishing together — queue instead
+  of overlapping. Players also register their pid at spawn time, closing the
+  ~100 ms startup window in which a second job could see silence.
+- **No more mid-word crops:** when no sentence boundary fit inside the length
+  clamp, the spoken text was hard-sliced mid-word ("…an ask for you, flagged
+  i"). The clamp now degrades gracefully — sentence, else clause, else word
+  boundary. Bare IP addresses are also stripped from spoken text (they read
+  terribly and their dots confused the sentence detector).
+- **On-demand recap:** `claude-voice recap` speaks where the most recent
+  session stands — Claude Code's persisted idle recap (`away_summary`
+  transcript entry) when that's the newest word, else the closing sentence of
+  the last assistant message — prefixed with the project name. Built to hang
+  off an OS-level hotkey (README ships a Karabiner double-tap-Right-Ctrl
+  rule); speaks even while muted, since you explicitly asked. On macOS,
+  `claude-voice shortcut` generates a hotkey-ready Shortcuts workflow with the
+  machine's real paths, signs it locally, and opens the import dialog.
+- **No stale idle nudge:** "Claude is waiting for you" is skipped for 10
+  minutes after a spoken summary — it arrived right after the summary and
+  implied action was needed when the job was simply done. Silent finishes
+  (trivial replies, below-threshold tasks) still get the nudge.
+
 ## 0.4.0 — 2026-08-03
 
 - **Redesigned `init`:** arrow-key menus, styled steps, spinner, and a proper
