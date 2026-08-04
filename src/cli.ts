@@ -5,7 +5,8 @@ import * as ui from "./ui.ts";
 import { CONFIG_PATH, loadConfig, type Preset, type VoiceConfig } from "./config.ts";
 import { listProviders } from "./providers/registry.ts";
 import { install, listSystemVoices, uninstall } from "./install.ts";
-import { mute, muteStatus, unmute } from "./mute.ts";
+import { mute, muteStatus, parseDurationMs, unmute } from "./mute.ts";
+import { formatStats, readMetrics } from "./metrics.ts";
 import { detachChime, detachSpeak } from "./speak.ts";
 import { extractRecap, latestTranscript } from "./recap.ts";
 import { createRecapShortcut } from "./shortcut.ts";
@@ -48,9 +49,28 @@ switch (cmd) {
 
   case "test": {
     const text = process.argv.slice(3).join(" ") || "Claude voice is working.";
-    detachChime("cli-test", "done");
-    detachSpeak("cli-test", text, loadConfig());
+    detachChime("cli-test", "done", "test");
+    detachSpeak("cli-test", text, loadConfig(), { event: "test" });
     console.log("Playing… (detached)");
+    break;
+  }
+
+  // Latency + outcome metrics: where does the time go between a hook firing
+  // and audio being audible — dispatch, TTS engine, or speaker queue?
+  case "stats": {
+    const flags = process.argv.slice(3);
+    const json = flags.includes("--json");
+    const window = flags.find((f) => f !== "--json") ?? "24h";
+    let windowMs: number;
+    try {
+      windowMs = parseDurationMs(window) ?? 24 * 3_600_000;
+    } catch (err) {
+      console.error((err as Error).message);
+      process.exitCode = 1;
+      break;
+    }
+    const records = readMetrics(windowMs);
+    console.log(json ? JSON.stringify(records, null, 2) : formatStats(records, window));
     break;
   }
 
@@ -66,7 +86,7 @@ switch (cmd) {
       break;
     }
     const spoken = withProjectPrefix(recap.text, projectName(recap.cwd));
-    detachSpeak("cli-recap", spoken, loadConfig());
+    detachSpeak("cli-recap", spoken, loadConfig(), { event: "recap" });
     console.log(spoken);
     break;
   }
@@ -114,6 +134,7 @@ switch (cmd) {
         "  claude-voice test [text]     synthesize and play a phrase",
         "  claude-voice recap           speak where the latest session stands",
         "  claude-voice shortcut        macOS: generate a hotkey-ready Shortcut for recap",
+        "  claude-voice stats [24h|7d] [--json]  audio latency + outcome metrics",
         "  claude-voice config          show active config + its path",
         "  claude-voice mute [30m|2h|1d]  mute all audio (no duration = until unmute)",
         "  claude-voice unmute          lift a mute",
@@ -233,8 +254,8 @@ async function init(): Promise<void> {
   }
 
   if (await ui.confirm("Play a test phrase now?", true)) {
-    detachChime("cli-test", "done");
-    detachSpeak("cli-test", "Claude voice is ready.", loadConfig());
+    detachChime("cli-test", "done", "test");
+    detachSpeak("cli-test", "Claude voice is ready.", loadConfig(), { event: "test" });
     ui.step("Test", "playing…");
   }
 

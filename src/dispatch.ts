@@ -12,6 +12,7 @@ import {
   throttled,
 } from "./speak.ts";
 import { clearMilestone, nextMilestone } from "./milestone.ts";
+import { recordMetric } from "./metrics.ts";
 import { muted } from "./mute.ts";
 import {
   endSession,
@@ -75,7 +76,7 @@ async function main() {
     // same remark twice.
     case "milestone": {
       if (!policy.speakMilestones) return;
-      if (silenced(cfg)) return;
+      if (silenced(cfg, event)) return;
       if (playing(session)) return; // never talk over summary/notification/self
       if (throttled(session, cfg.throttleSeconds)) return; // a summary just spoke
       const stats = typeof p.transcript_path === "string" ? readLastTurn(p.transcript_path) : undefined;
@@ -102,27 +103,30 @@ async function main() {
       }
       // expendable: if the speaker is busy, DROP it rather than queue it —
       // a delayed glance is a wrong glance (summaries/notifications queue).
-      detachSpeak(session, spokenText(remark, p.cwd, cfg, session), cfg, { expendable: true });
+      detachSpeak(session, spokenText(remark, p.cwd, cfg, session), cfg, {
+        expendable: true,
+        event,
+      });
       return;
     }
 
     case "notification": {
-      if (silenced(cfg)) return;
+      if (silenced(cfg, event)) return;
       if (p.notification_type === "idle_prompt" && throttled(session, IDLE_GRACE_SECONDS)) {
         logDebug("notification: skipped idle_prompt (summary spoken recently)");
         return;
       }
-      if (policy.chimeOnNotification) detachChime(session, "attention");
+      if (policy.chimeOnNotification) detachChime(session, "attention", event);
       if (policy.speakNotification) {
         const phrase = notificationPhrase(p.notification_type, p.message);
-        detachSpeak(session, spokenText(phrase, p.cwd, cfg, session), cfg);
+        detachSpeak(session, spokenText(phrase, p.cwd, cfg, session), cfg, { event });
       }
       return;
     }
 
     case "stop": {
-      if (silenced(cfg)) return;
-      if (policy.chimeOnStop) detachChime(session, "done");
+      if (silenced(cfg, event)) return;
+      if (policy.chimeOnStop) detachChime(session, "done", event);
       if (!policy.speakSummary) return;
 
       const text: string =
@@ -138,10 +142,12 @@ async function main() {
 
       if (!marker && !policy.speakAlways && !substantial) {
         logDebug("stop: skipped (no marker, not substantial)");
+        recordMetric({ t: "skip", ts: Date.now(), event, reason: "not-substantial" });
         return;
       }
       if (throttled(session, cfg.throttleSeconds)) {
         logDebug("stop: skipped (throttled)");
+        recordMetric({ t: "skip", ts: Date.now(), event, reason: "throttled" });
         return;
       }
 
@@ -151,7 +157,7 @@ async function main() {
       if (!spoken) return;
       markSpoken(session);
       interrupt(session); // a still-playing milestone must not talk over this
-      detachSpeak(session, spokenText(spoken, p.cwd, cfg, session), cfg);
+      detachSpeak(session, spokenText(spoken, p.cwd, cfg, session), cfg, { event });
       return;
     }
 
@@ -166,20 +172,20 @@ function spokenText(text: string, cwd: unknown, cfg: VoiceConfig, session: strin
 }
 
 /** Purposeful mute + quiet hours + focus muting, shared by stop/notification. */
-function silenced(cfg: VoiceConfig): boolean {
-  if (muted()) {
-    logDebug("silenced: muted on purpose");
-    return true;
-  }
-  if (inQuietHours(cfg)) {
-    logDebug("silenced: quiet hours");
-    return true;
-  }
-  if (mutedByFocus(cfg)) {
-    logDebug("silenced: terminal focused");
-    return true;
-  }
-  return false;
+function silenced(cfg: VoiceConfig, event: string): boolean {
+  const reason = muted()
+    ? "muted"
+    : inQuietHours(cfg)
+      ? "quiet-hours"
+      : mutedByFocus(cfg)
+        ? "focus"
+        : undefined;
+  if (!reason) return false;
+  logDebug(`silenced: ${reason}`);
+  // Milestone checks fire on every tool use — recording each would flood the
+  // metrics file with by-design silence. Only real utterance-losses count.
+  if (event !== "milestone") recordMetric({ t: "skip", ts: Date.now(), event, reason });
+  return true;
 }
 
 /** Tailor the spoken phrase to the notification type when we recognize it. */

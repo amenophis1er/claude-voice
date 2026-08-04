@@ -12,6 +12,7 @@ import { platform, tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import type { VoiceConfig } from "./config.ts";
+import { recordMetric, type UtteranceRecord } from "./metrics.ts";
 import { defaultProvider, getProvider } from "./providers/registry.ts";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -56,15 +57,16 @@ export function detachSpeak(
   session: string,
   text: string,
   cfg: VoiceConfig,
-  opts?: { expendable?: boolean },
+  opts?: { expendable?: boolean; event?: string },
 ): void {
-  detach({ kind: "speak", session, text, cfg, expendable: opts?.expendable });
+  detach({ kind: "speak", session, text, cfg, expendable: opts?.expendable, event: opts?.event });
 }
-export function detachChime(session: string, chime: ChimeKind): void {
-  detach({ kind: "chime", session, chime });
+export function detachChime(session: string, chime: ChimeKind, event?: string): void {
+  detach({ kind: "chime", session, chime, event });
 }
 
 function detach(job: PlayerJob): void {
+  job.emittedAt = now();
   const payloadFile = join(AUDIO_DIR, `job-${process.pid}-${jobCounter++}.json`);
   writeFileSync(payloadFile, JSON.stringify(job));
   const child = spawn(process.execPath, [join(HERE, `player${EXT}`), payloadFile], {
@@ -136,37 +138,67 @@ export interface PlayerJob {
   cfg?: VoiceConfig;
   /** Time-sensitive audio (milestones): drop it if the speaker is busy. */
   expendable?: boolean;
+  /** Which hook event / CLI command produced this job (for metrics). */
+  event?: string;
+  /** Stamped by detach() so the worker can measure dispatch → audible. */
+  emittedAt?: number;
 }
 export type ChimeKind = "attention" | "done";
 
 /** Run one job to completion. The detached player calls this. */
 export async function runJob(job: PlayerJob): Promise<void> {
   appendFileSync(pidFile(job.session), `${process.pid}\n`);
+  const metric: UtteranceRecord = {
+    t: "utterance",
+    ts: job.emittedAt ?? now(),
+    event: job.event,
+    kind: job.kind,
+    session: job.session,
+    outcome: "no-audio",
+  };
+  if (job.emittedAt) metric.emitToWorkerMs = now() - job.emittedAt;
   try {
     cleanupOldAudio();
     let audioFile: string | undefined;
     if (job.kind === "chime") {
       audioFile = chimeFile(job.chime ?? "attention");
+      metric.provider = "chime";
     } else if (job.text && job.cfg) {
-      audioFile = await synthesize(job.text, job.cfg);
+      const t0 = now();
+      const synth = await synthesize(job.text, job.cfg);
+      metric.synthMs = now() - t0;
+      metric.provider = synth.provider;
+      if (synth.fallback) metric.fallback = true;
+      audioFile = synth.audioFile;
     }
     if (!audioFile) return;
     // One voice at a time, machine-wide: synthesis above runs in parallel,
     // but playback queues so concurrent jobs never talk over each other.
     // Expendable audio gets a short grace, then is dropped — by the time the
     // speaker frees up, the moment it narrated is gone.
+    const q0 = now();
     const locked = await acquirePlaybackLock(job.expendable ? 3_000 : undefined);
+    metric.queueWaitMs = now() - q0;
     if (!locked && job.expendable) {
+      metric.outcome = "dropped-busy";
       logDebug("expendable audio dropped: speaker busy");
       return;
     }
     try {
+      const p0 = now();
+      if (job.emittedAt) metric.totalMs = p0 - job.emittedAt;
       await playFile(audioFile);
+      metric.playMs = now() - p0;
+      metric.outcome = "played";
     } finally {
       if (locked) releasePlaybackLock();
     }
+  } catch (err) {
+    metric.outcome = "error";
+    throw err;
   } finally {
     removePid(job.session, process.pid);
+    recordMetric(metric);
   }
 }
 
@@ -183,23 +215,26 @@ function removePid(session: string, pid: number): void {
   }
 }
 
-async function synthesize(text: string, cfg: VoiceConfig): Promise<string> {
+async function synthesize(
+  text: string,
+  cfg: VoiceConfig,
+): Promise<{ audioFile: string; provider: string; fallback: boolean }> {
   const chosen = getProvider(cfg.provider) ?? defaultProvider();
   try {
-    return (
-      await chosen.synthesize({
-        text,
-        voice: cfg.voice,
-        rate: cfg.rate,
-        options: cfg.options,
-        outDir: AUDIO_DIR,
-      })
-    ).audioFile;
+    const r = await chosen.synthesize({
+      text,
+      voice: cfg.voice,
+      rate: cfg.rate,
+      options: cfg.options,
+      outDir: AUDIO_DIR,
+    });
+    return { audioFile: r.audioFile, provider: chosen.id, fallback: false };
   } catch (err) {
     logDebug(`provider ${chosen.id} failed: ${(err as Error).message}; falling back`);
     const fb = defaultProvider();
     if (fb.id === chosen.id) throw err;
-    return (await fb.synthesize({ text, outDir: AUDIO_DIR })).audioFile;
+    const r = await fb.synthesize({ text, outDir: AUDIO_DIR });
+    return { audioFile: r.audioFile, provider: fb.id, fallback: true };
   }
 }
 

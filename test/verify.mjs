@@ -26,6 +26,7 @@ import {
 } from "../src/speak.ts";
 import { clearMilestone, nextMilestone } from "../src/milestone.ts";
 import { extractRecap, latestTranscript } from "../src/recap.ts";
+import { formatStats, percentile, readMetrics, recordMetric } from "../src/metrics.ts";
 import { buildShortcutPlist, recapCommand } from "../src/shortcut.ts";
 
 // LEGACY: html-comment marker still parses for sessions on the old instruction
@@ -238,5 +239,43 @@ const plist = buildShortcutPlist('run "x" & <y>');
 assert.ok(plist.includes("is.workflow.actions.runshellscript"));
 assert.ok(plist.includes("&amp; &lt;y&gt;"), "special chars must be XML-escaped");
 assert.ok(!plist.includes("& <y>"), "unescaped command leaked into plist");
+
+// metrics: record → read round-trip, window filter, percentiles, report shape
+const metricsDir = join(tmpdir(), `claude-voice-test-metrics-${process.pid}`);
+mkdirSync(metricsDir, { recursive: true });
+process.env.CLAUDE_VOICE_METRICS_FILE = join(metricsDir, "metrics.jsonl");
+try {
+  const t0 = 1_700_000_000_000;
+  recordMetric({ t: "utterance", ts: t0, event: "stop", kind: "speak", session: "s",
+    provider: "openai", emitToWorkerMs: 120, synthMs: 1400, queueWaitMs: 0, playMs: 2500,
+    totalMs: 1600, outcome: "played" });
+  recordMetric({ t: "utterance", ts: t0 + 1000, event: "milestone", kind: "speak", session: "s",
+    provider: "openai", synthMs: 900, queueWaitMs: 3000, outcome: "dropped-busy" });
+  recordMetric({ t: "utterance", ts: t0 + 2000, event: "stop", kind: "chime", session: "s",
+    provider: "chime", queueWaitMs: 10, playMs: 400, outcome: "played" });
+  recordMetric({ t: "skip", ts: t0 + 3000, event: "stop", reason: "throttled" });
+  recordMetric({ t: "skip", ts: t0 - 999_999_999, event: "stop", reason: "muted" }); // outside window
+
+  const recs = readMetrics(3_600_000, t0 + 10_000); // 1h window
+  assert.equal(recs.length, 4, "old record filtered out");
+  assert.equal(recs.filter((r) => r.t === "skip").length, 1);
+
+  assert.equal(percentile([], 50), undefined);
+  assert.equal(percentile([5], 95), 5);
+  assert.equal(percentile([1, 2, 3, 4, 5, 6, 7, 8, 9, 10], 50), 5);
+  assert.equal(percentile([1, 2, 3, 4, 5, 6, 7, 8, 9, 10], 95), 10);
+
+  const report = formatStats(recs, "24h");
+  assert.ok(report.includes("3 utterances (2 spoken, 1 chimes)"), report);
+  assert.ok(report.includes("synthesis openai"), report);
+  assert.ok(report.includes("1 dropped (speaker busy)"), report);
+  assert.ok(report.includes("1 throttled"), report);
+  assert.ok(/emit → audible\s+p50 1\.6s/.test(report), report);
+  // empty window → friendly message, not a zero-filled table
+  assert.ok(formatStats([], "24h").includes("No metrics"), "empty-state message");
+} finally {
+  delete process.env.CLAUDE_VOICE_METRICS_FILE;
+  rmSync(metricsDir, { recursive: true, force: true });
+}
 
 console.log("ALL ASSERTIONS PASSED");

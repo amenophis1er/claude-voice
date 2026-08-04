@@ -129,7 +129,14 @@ npx @amenophis1er/claude-voice test "Hello"    # hear the current voice right no
 npx @amenophis1er/claude-voice list            # list providers
 npx @amenophis1er/claude-voice config          # show active config + where it lives
 npx @amenophis1er/claude-voice recap           # speak where the latest session stands
+npx @amenophis1er/claude-voice stats           # audio latency + outcome metrics (24h; try `7d`, `--json`)
 ```
+
+`stats` shows where the time goes between a hook firing and audio being
+audible — dispatch overhead, TTS synthesis (per provider), speaker-queue
+wait — plus outcomes: played, dropped (speaker busy), and upstream skips
+(throttled, muted, quiet hours). Metrics are always on and cost nothing; the
+JSONL file rotates at ~512 KB.
 
 ## On-demand recap (hotkey)
 

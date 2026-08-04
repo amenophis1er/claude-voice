@@ -1,5 +1,16 @@
 # Changelog
 
+## Unreleased
+
+- **Latency metrics + `stats` command:** every utterance now records where its
+  time went — hook dispatch → worker boot → TTS synthesis (per provider, with
+  fallback flagged) → speaker-queue wait → playback — plus its outcome (played,
+  dropped while speaker busy, error) and upstream skips (throttled,
+  not-substantial, muted, quiet hours, focus). `claude-voice stats [24h|7d]
+  [--json]` (also via `/claude-voice stats`) reports p50/p95 per stage, so
+  "is it the event path or the TTS engine?" has a one-command answer. Records
+  land in `~/.claude/voice/metrics.jsonl`, always on, rotated at ~512 KB.
+
 ## 0.5.0 — 2026-08-03
 
 - **Tell parallel sessions apart:** spoken audio can be prefixed with the
