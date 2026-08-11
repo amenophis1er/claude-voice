@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.6.2 — 2026-08-11
+
+- **Inline code words are spoken again:** the sanitizer dropped every
+  `` `backtick span` ``, so "switch the preset to `verbose`" was spoken as
+  "switch the preset to" — the load-bearing word was the one removed. Short
+  word-like spans are now read aloud; spans with path/code punctuation
+  (slashes, braces, `=`, `$`, …) are still dropped.
+
 ## 0.6.1 — 2026-08-11
 
 - **Real-time milestones:** mid-task remarks (verbose preset) are now spoken
