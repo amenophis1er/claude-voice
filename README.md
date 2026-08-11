@@ -47,8 +47,9 @@ audio.
 
 - **Node ≥ 20** on your PATH (hooks run small compiled JS files)
 - **Playback:** macOS works out of the box (`say` + `afplay`). Linux needs
-  `espeak-ng` and `paplay`. Windows uses built-in PowerShell speech. Chimes are
-  macOS-only for now.
+  `espeak-ng` and `paplay` (or `aplay`, tried automatically). Windows uses
+  built-in PowerShell speech. Chimes are macOS-only for now. Cloud providers
+  request WAV on Windows so their audio plays there too.
 
 ## What you'll hear
 
@@ -269,7 +270,7 @@ normal key combo.
 | `milestoneIntervalSeconds` | Minimum gap between two spoken milestones (`verbose`). |
 | `substantial` | A task must clear **one** threshold to be summarized. |
 | `speakOnlyWhenUnfocused` | Speak only when your terminal is **not** the frontmost app (macOS). |
-| `announceProject` | Prefix audio with the project folder name ("claude voice: Task complete."). `"auto"` = only while other sessions are active; `"always"`; `"off"`. |
+| `announceProject` | Prefix audio with the project folder name ("claude voice: Task complete."). `"auto"` = only while other sessions are active; `"always"`; `"off"`. On macOS, `"auto"` also skips the prefix when you're looking straight at *this* session's own tab (Terminal.app or iTerm2) — there's nothing to disambiguate. |
 | `quietHours` | 24h local time; wraps midnight (`22 → 8` means 10pm–8am). |
 
 Edit the file directly or rerun `npx @amenophis1er/claude-voice init` — changes apply on the
@@ -305,6 +306,11 @@ the *automatic* silencers: `quietHours` (config) and `speakOnlyWhenUnfocused`
 - **You can tell sessions apart:** while more than one session is running,
   spoken audio is prefixed with the project folder name — "claude voice: Task
   complete." — so you know which window is talking (`announceProject`).
+  On macOS with Terminal.app or iTerm2, the prefix is also skipped when you're
+  looking at that session's own tab: the name adds nothing when the session is
+  right in front of you. Detection needs the Automation permission (asked the
+  first time) and fails open — when in doubt, the prefix stays. tmux, ssh, and
+  non-scriptable terminals keep the prefix as before.
 - **It shuts up when you type:** submitting a new prompt instantly kills any
   audio still playing.
 - **It never stalls Claude:** hooks are async and audio plays in a detached

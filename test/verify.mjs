@@ -18,6 +18,7 @@ import {
   touchSession,
   withProjectPrefix,
 } from "../src/announce.ts";
+import { parseProcessTree } from "../src/tab.ts";
 import {
   acquirePlaybackLock,
   markSpoken,
@@ -129,11 +130,63 @@ try {
   assert.equal(shouldAnnounceProject({ announceProject: "auto" }, "a"), false);
   touchSession("b"); // a second session appears
   assert.equal(shouldAnnounceProject({ announceProject: "auto" }, "a"), true);
+  // …but if the user is looking straight at session a's tab, the prefix is noise
+  const lookingAtMe = () => true;
+  assert.equal(shouldAnnounceProject({ announceProject: "auto" }, "a", lookingAtMe), false);
+  // and any uncertainty (can't detect the tab) keeps the prefix — fail open
+  const cantTell = () => undefined;
+  assert.equal(shouldAnnounceProject({ announceProject: "auto" }, "a", cantTell), true);
   endSession("b"); // and ends
   assert.equal(shouldAnnounceProject({ announceProject: "auto" }, "a"), false);
 } finally {
   delete process.env.CLAUDE_VOICE_SESSIONS_DIR;
   rmSync(announceDir, { recursive: true, force: true });
+}
+
+// ── tab.ts: process-tree parsing ─────────────────────────────────────────────
+{
+  // Terminal.app: executable name == scriptable app name
+  const terminalPs = [
+    "  PID  PPID TTY      COMM",
+    "    1     0 ??       /sbin/launchd",
+    " 2998     1 ??       /Applications/Utilities/Terminal.app/Contents/MacOS/Terminal",
+    "39264  2998 ttys014  /usr/bin/login",
+    "39266 39264 ttys014  -zsh",
+    "52542 39266 ttys014  claude",
+  ].join("\n");
+  assert.deepEqual(parseProcessTree(terminalPs, 52542), { tty: "ttys014", app: "Terminal" });
+
+  // iTerm2: bundle is iTerm.app but the binary is iTerm2 — matched via exe name
+  const itermPs = [
+    "  PID  PPID TTY      COMM",
+    "    1     0 ??       /sbin/launchd",
+    " 2998     1 ??       /Applications/iTerm.app/Contents/MacOS/iTerm2",
+    "39264  2998 ttys014  /usr/bin/login",
+    "52542 39264 ttys014  claude",
+  ].join("\n");
+  assert.deepEqual(parseProcessTree(itermPs, 52542), { tty: "ttys014", app: "iTerm2" });
+
+  // VS Code integrated terminal: scriptable? No AppleScript tty bridge →
+  // undefined (fail open), so the prefix is never wrongly suppressed.
+  const vscodePs = terminalPs
+    .replace("Utilities/Terminal", "Visual Studio Code")
+    .replace("MacOS/Terminal", "MacOS/Code");
+  assert.equal(parseProcessTree(vscodePs, 52542), undefined);
+
+  // No tty in the chain (e.g. launched from a non-terminal wrapper) — undefined.
+  const noTtyPs = "    1     0 ??       /sbin/launchd\n  100     1 ??       node";
+  assert.equal(parseProcessTree(noTtyPs, 100), undefined);
+
+  // An unrelated daemon's tree must not leak into the walk.
+  const ghostPs = [
+    "  PID  PPID TTY      COMM",
+    "    1     0 ??       /sbin/launchd",
+    " 2998     1 ??       /Applications/Utilities/Terminal.app/Contents/MacOS/Terminal",
+    "39264  2998 ttys014  /usr/bin/login",
+    "52542 39264 ttys020  claude", // tty differs from the tab's — still the tab's tty
+  ].join("\n");
+  // first ancestor with a real tty is the tab owner; our own ttys020 is kept
+  assert.equal(parseProcessTree(ghostPs, 52542)?.tty, "ttys020");
 }
 
 // idle grace: a fresh spoken summary suppresses the idle nudge (dispatch reuses
