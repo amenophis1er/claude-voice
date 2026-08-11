@@ -78,7 +78,7 @@ function writeCommandFile(appDir: string): void {
     COMMAND_FILE,
     [
       "---",
-      "description: Control claude-voice — mute [30m|2h|1d], unmute, status",
+      "description: Control claude-voice — stop, mute [30m|2h|1d], unmute, status",
       "---",
       "",
       `Run this via Bash: \`node "${cli}" $ARGUMENTS\``,

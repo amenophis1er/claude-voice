@@ -25,6 +25,16 @@ export interface TtsProvider {
    * Throw on failure — the dispatcher will fall back to the zero-config provider.
    */
   synthesize(input: SynthesizeInput): Promise<SynthesizeResult>;
+
+  /**
+   * Optional: yield the same text as a sequence of play-ready chunk files
+   * (typically one per sentence). Playback starts after the FIRST chunk, so
+   * perceived latency stays near-constant no matter how long the text is —
+   * speak.ts overlaps synthesis of chunk n+1 with playback of chunk n.
+   * A throw before the first yield falls back like synthesize(); later
+   * throws just end the stream (the listener already heard the start).
+   */
+  synthesizeStream?(input: SynthesizeInput): AsyncGenerator<SynthesizeResult>;
 }
 
 export interface SynthesizeInput {

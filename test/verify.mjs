@@ -26,6 +26,7 @@ import {
 } from "../src/speak.ts";
 import { clearMilestone, nextMilestone } from "../src/milestone.ts";
 import { extractRecap, latestTranscript } from "../src/recap.ts";
+import { formatStats, percentile, readMetrics, recordMetric } from "../src/metrics.ts";
 import { buildShortcutPlist, recapCommand } from "../src/shortcut.ts";
 
 // LEGACY: html-comment marker still parses for sessions on the old instruction
@@ -238,5 +239,115 @@ const plist = buildShortcutPlist('run "x" & <y>');
 assert.ok(plist.includes("is.workflow.actions.runshellscript"));
 assert.ok(plist.includes("&amp; &lt;y&gt;"), "special chars must be XML-escaped");
 assert.ok(!plist.includes("& <y>"), "unescaped command leaked into plist");
+
+// metrics: record → read round-trip, window filter, percentiles, report shape
+const metricsDir = join(tmpdir(), `claude-voice-test-metrics-${process.pid}`);
+mkdirSync(metricsDir, { recursive: true });
+process.env.CLAUDE_VOICE_METRICS_FILE = join(metricsDir, "metrics.jsonl");
+try {
+  const t0 = 1_700_000_000_000;
+  recordMetric({ t: "utterance", ts: t0, event: "stop", kind: "speak", session: "s",
+    provider: "openai", emitToWorkerMs: 120, synthMs: 1400, queueWaitMs: 0, playMs: 2500,
+    totalMs: 1600, outcome: "played" });
+  recordMetric({ t: "utterance", ts: t0 + 1000, event: "milestone", kind: "speak", session: "s",
+    provider: "openai", synthMs: 900, queueWaitMs: 3000, outcome: "dropped-busy" });
+  recordMetric({ t: "utterance", ts: t0 + 2000, event: "stop", kind: "chime", session: "s",
+    provider: "chime", queueWaitMs: 10, playMs: 400, outcome: "played" });
+  recordMetric({ t: "skip", ts: t0 + 3000, event: "stop", reason: "throttled" });
+  recordMetric({ t: "skip", ts: t0 - 999_999_999, event: "stop", reason: "muted" }); // outside window
+
+  const recs = readMetrics(3_600_000, t0 + 10_000); // 1h window
+  assert.equal(recs.length, 4, "old record filtered out");
+  assert.equal(recs.filter((r) => r.t === "skip").length, 1);
+
+  assert.equal(percentile([], 50), undefined);
+  assert.equal(percentile([5], 95), 5);
+  assert.equal(percentile([1, 2, 3, 4, 5, 6, 7, 8, 9, 10], 50), 5);
+  assert.equal(percentile([1, 2, 3, 4, 5, 6, 7, 8, 9, 10], 95), 10);
+
+  const report = formatStats(recs, "24h");
+  assert.ok(report.includes("3 utterances (2 spoken, 1 chimes)"), report);
+  assert.ok(report.includes("synthesis openai"), report);
+  assert.ok(report.includes("1 dropped (speaker busy)"), report);
+  assert.ok(report.includes("1 throttled"), report);
+  assert.ok(/emit → audible\s+p50 1\.6s/.test(report), report);
+  // empty window → friendly message, not a zero-filled table
+  assert.ok(formatStats([], "24h").includes("No metrics"), "empty-state message");
+} finally {
+  delete process.env.CLAUDE_VOICE_METRICS_FILE;
+  rmSync(metricsDir, { recursive: true, force: true });
+}
+
+// ── kokoro: pure helpers ─────────────────────────────────────────────────────
+{
+  const { pythonVersionOk, formatBytes, SERVER_PY, MODEL_VARIANTS } = await import("../src/kokoro.ts");
+  // onnxruntime wheel range: 3.10–3.13; too old, too new, and garbage all fail
+  assert.ok(pythonVersionOk("Python 3.12.4"));
+  assert.ok(pythonVersionOk("Python 3.10.0"));
+  assert.ok(!pythonVersionOk("Python 3.9.18"));
+  assert.ok(!pythonVersionOk("Python 3.14.0"));
+  assert.ok(!pythonVersionOk("Python 2.7.18"));
+  assert.ok(!pythonVersionOk("zsh: command not found"));
+
+  assert.equal(formatBytes(88_000_000), "88 MB");
+  assert.equal(formatBytes(1_500_000_000), "1.5 GB");
+  assert.equal(formatBytes(512), "512 B");
+
+  // the embedded server must keep serving the endpoints the provider calls
+  assert.ok(SERVER_PY.includes('"/synth"'), "server handles /synth");
+  assert.ok(SERVER_PY.includes('"/health"'), "server handles /health");
+  // and must prefer whichever model the installer downloads
+  for (const v of Object.values(MODEL_VARIANTS)) {
+    assert.ok(SERVER_PY.includes(v.file), `server knows ${v.file}`);
+  }
+}
+
+// ── speech: "full" — a whole markdown reply must sanitize into clean prose ───
+{
+  const reply = [
+    "**What you'll feel:** the wait before the first word.",
+    "",
+    "- **Cold server.** It respawns in ~2 s. See `ensureServer()` in /Users/x/kokoro.ts.",
+    "- Check https://example.com/docs for details.",
+    "",
+    "```bash",
+    "claude-voice stats",
+    "```",
+    "",
+    "So: use it for a day and let the stats settle.",
+  ].join("\n");
+  const full = clampSpokenLength(sanitizeForSpeech(reply), 4000);
+  // everything speakable survives — start AND end, not just the closing line
+  assert.ok(full.includes("the wait before the first word"), full);
+  assert.ok(full.includes("use it for a day"), full);
+  // nothing unspeakable leaks
+  assert.ok(!/[`*#]|\/Users|https:|claude-voice stats/.test(full), `leaked: ${full}`);
+  // defaults: existing configs without a speech field read as "closing"
+  const { loadConfig: loadCfg } = await import("../src/config.ts");
+  assert.ok(["closing", "full"].includes(loadCfg().speech));
+}
+
+// ── kokoro: sentence chunking for streamed synthesis ─────────────────────────
+{
+  const { splitSentences } = await import("../src/providers/kokoro.ts");
+  // multi-sentence prose splits at sentence ends
+  assert.deepEqual(
+    splitSentences("The parser is refactored and tests pass. Coverage went up by three percent."),
+    ["The parser is refactored and tests pass.", "Coverage went up by three percent."],
+  );
+  // tiny fragments merge forward instead of becoming choppy micro-chunks
+  assert.deepEqual(
+    splitSentences("Done. All forty-two tests are passing and the build is green."),
+    ["Done. All forty-two tests are passing and the build is green."],
+  );
+  // a tiny trailing fragment merges backward
+  assert.deepEqual(
+    splitSentences("Everything is deployed and the dashboards look healthy. Nice."),
+    ["Everything is deployed and the dashboards look healthy. Nice."],
+  );
+  // single sentence passes through untouched; empty stays empty
+  assert.deepEqual(splitSentences("Claude voice is working."), ["Claude voice is working."]);
+  assert.deepEqual(splitSentences(""), []);
+}
 
 console.log("ALL ASSERTIONS PASSED");

@@ -81,16 +81,42 @@ closing sentence — no code, paths, or URLs — and that's what gets spoken.
 ## Voices and providers
 
 The default (`system`) uses your OS's built-in text-to-speech: zero config, no
-API keys, works offline. Two opt-in upgrades:
+API keys, works offline. Three opt-in upgrades:
 
 | provider | quality | needs |
 | --- | --- | --- |
 | `system` (default) | fine | nothing |
+| `kokoro` | great | one-time local install (~350 MB) — free, offline |
 | `elevenlabs` | best | `ELEVENLABS_API_KEY` in your environment |
 | `openai` | great | `OPENAI_API_KEY` in your environment |
 
+### Kokoro — neural voices, fully local
+
+Kokoro is a small open-weights TTS model that runs on your CPU (no GPU
+needed) faster than real time — neural-voice quality with no API key, no
+network, no per-word cost:
+
+```bash
+claude-voice kokoro install      # venv + model under ~/.claude/voice/kokoro
+claude-voice kokoro voice        # re-pick the voice — each speaks as you browse
+claude-voice kokoro status       # install state, disk use, server state
+claude-voice kokoro uninstall    # removes everything it installed
+```
+
+The install is self-contained under `~/.claude/voice/kokoro` (a private
+Python venv plus the model — nothing global, no Homebrew packages), ends with
+a spoken smoke test, and finishes with a voice picker where each voice
+introduces itself as you arrow onto it. It needs Python 3.10–3.13 on your
+PATH, or [`uv`](https://docs.astral.sh/uv/) (preferred — it fetches its own).
+
+Synthesis runs through a tiny localhost server that starts on demand, is
+pre-warmed when you submit a prompt, and exits by itself after 10 idle
+minutes. Warm latency is a few hundred milliseconds (`claude-voice stats`
+shows it as `synthesis kokoro`). Uninstalling deletes that one directory and
+points config back at the system voice — nothing else to clean up.
+
 **Bring your own TTS:** the `openai` provider works with any OpenAI-compatible
-endpoint (Kokoro, LocalAI, a self-hosted server) — set `options.baseUrl` and
+endpoint (LocalAI, a self-hosted server) — set `options.baseUrl` and
 your key, and pick a voice your server knows:
 
 ```json
@@ -104,8 +130,8 @@ your key, and pick a voice your server knows:
 With a custom `baseUrl`, `model` is only sent if you set `options.model` —
 your server's default is usually right.
 
-If a cloud provider fails (no key, network down, timeout), it falls back to the
-system voice automatically — you still hear your summary.
+If a provider fails (no key, kokoro not installed, network down, timeout), it
+falls back to the system voice automatically — you still hear your summary.
 
 **Keys from a secret manager:** hooks run outside your shell rc, so env vars
 set by on-demand loaders are often absent. Instead of exporting keys globally,
@@ -129,7 +155,14 @@ npx @amenophis1er/claude-voice test "Hello"    # hear the current voice right no
 npx @amenophis1er/claude-voice list            # list providers
 npx @amenophis1er/claude-voice config          # show active config + where it lives
 npx @amenophis1er/claude-voice recap           # speak where the latest session stands
+npx @amenophis1er/claude-voice stats           # audio latency + outcome metrics (24h; try `7d`, `--json`)
 ```
+
+`stats` shows where the time goes between a hook firing and audio being
+audible — dispatch overhead, TTS synthesis (per provider), speaker-queue
+wait — plus outcomes: played, dropped (speaker busy), and upstream skips
+(throttled, muted, quiet hours). Metrics are always on and cost nothing; the
+JSONL file rotates at ~512 KB.
 
 ## On-demand recap (hotkey)
 
@@ -155,6 +188,18 @@ Click *Add Shortcut*, then in the shortcut's ⓘ details panel assign a global
 hotkey — ⌃⌥V is a safe, mnemonic choice (avoid ⌃⌥R: Claude Code uses it for
 prompt search). The hotkey itself can't ship in the file; Apple stores those
 per device.
+
+The natural companion — especially with `"speech": "full"` — is a hotkey that
+**shuts the voice up mid-word**:
+
+```bash
+npx @amenophis1er/claude-voice shortcut stop   # generate "Claude voice stop"
+npx @amenophis1er/claude-voice stop            # same thing from a terminal
+```
+
+`stop` cuts whatever is playing right now, across all sessions, and says
+nothing about the future (unlike `mute`). Typing a new prompt still interrupts
+automatically, as always.
 
 **Prefer a double-tap gesture?** Double-tap **Right Ctrl** with
 [Karabiner-Elements](https://karabiner-elements.pqrs.org) (macOS):
@@ -198,6 +243,7 @@ normal key combo.
 ```json
 {
   "preset": "summary",
+  "speech": "closing",
   "provider": "system",
   "voice": null,
   "rate": 1,
@@ -213,8 +259,9 @@ normal key combo.
 
 | field | meaning |
 | --- | --- |
-| `preset` | The one knob — see table above. |
-| `provider` | `system`, `elevenlabs`, or `openai`. |
+| `preset` | The one knob — see table above. It decides **when** to speak. |
+| `speech` | How much of a spoken reply is read: `"closing"` (the closing sentence — default) or `"full"` (the entire reply, sanitized: code, paths, and URLs stripped). Full pairs best with `kokoro` — free, starts in ~0.5 s, and a new prompt cuts it off instantly. |
+| `provider` | `system`, `kokoro`, `elevenlabs`, or `openai`. |
 | `voice` | Provider-specific voice name/id. |
 | `rate` | Speech speed, `1` = normal. |
 | `options` | Free-form provider extras, e.g. `{ "model_id": "eleven_turbo_v2_5" }`. |

@@ -65,7 +65,7 @@ function writeCommandFile(appDir) {
     mkdirSync(dirname(COMMAND_FILE), { recursive: true });
     writeFileSync(COMMAND_FILE, [
         "---",
-        "description: Control claude-voice — mute [30m|2h|1d], unmute, status",
+        "description: Control claude-voice — stop, mute [30m|2h|1d], unmute, status",
         "---",
         "",
         `Run this via Bash: \`node "${cli}" $ARGUMENTS\``,

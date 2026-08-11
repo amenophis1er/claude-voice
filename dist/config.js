@@ -3,6 +3,7 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 const DEFAULTS = {
     preset: "summary",
+    speech: "closing",
     provider: "system",
     rate: 1,
     options: {},

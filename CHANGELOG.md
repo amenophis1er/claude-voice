@@ -1,5 +1,33 @@
 # Changelog
 
+## 0.5.1 — 2026-08-11
+
+- **Kokoro — free, offline neural TTS:** new `kokoro` provider running a small
+  open-weights model on your CPU — neural-voice quality with no API key, no
+  network, no per-word cost. `claude-voice kokoro install` sets up everything
+  under `~/.claude/voice/kokoro` (private Python venv + model, ~350 MB, nothing
+  global), ends with a spoken smoke test and a voice picker where each voice
+  introduces itself as you arrow onto it; `uninstall` removes that one
+  directory and resets config. Synthesis runs through an on-demand localhost
+  server that is pre-warmed on prompt submit and exits after 10 idle minutes.
+- **Sentence-streaming playback:** providers can synthesize sentence-by-
+  sentence while earlier chunks play, so time-to-first-word stays ~0.5 s
+  regardless of reply length (kokoro uses this).
+- **Full readout:** new `speech: "closing" | "full"` config — `full` reads the
+  entire reply (sanitized, clamped ~4000 chars), affordable now that TTS can
+  be local.
+- **`claude-voice stop`:** kill the current readout mid-word across all
+  sessions; `claude-voice shortcut stop` generates a hotkey-ready macOS
+  Shortcut for it.
+- **Latency metrics + `stats` command:** every utterance now records where its
+  time went — hook dispatch → worker boot → TTS synthesis (per provider, with
+  fallback flagged) → speaker-queue wait → playback — plus its outcome (played,
+  dropped while speaker busy, error) and upstream skips (throttled,
+  not-substantial, muted, quiet hours, focus). `claude-voice stats [24h|7d]
+  [--json]` (also via `/claude-voice stats`) reports p50/p95 per stage, so
+  "is it the event path or the TTS engine?" has a one-command answer. Records
+  land in `~/.claude/voice/metrics.jsonl`, always on, rotated at ~512 KB.
+
 ## 0.5.0 — 2026-08-03
 
 - **Tell parallel sessions apart:** spoken audio can be prefixed with the

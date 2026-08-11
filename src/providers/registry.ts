@@ -1,4 +1,5 @@
 import { elevenLabsProvider } from "./elevenlabs.ts";
+import { kokoroProvider } from "./kokoro.ts";
 import { openAiProvider } from "./openai.ts";
 import { systemProvider } from "./system.ts";
 import type { TtsProvider } from "./types.ts";
@@ -7,7 +8,7 @@ import type { TtsProvider } from "./types.ts";
  * The single place providers are registered. To add one: import it and add it
  * to this array. Everything else (config, CLI listing, fallback) reads from here.
  */
-const PROVIDERS: TtsProvider[] = [systemProvider, elevenLabsProvider, openAiProvider];
+const PROVIDERS: TtsProvider[] = [systemProvider, kokoroProvider, elevenLabsProvider, openAiProvider];
 
 const byId = new Map(PROVIDERS.map((p) => [p.id, p]));
 

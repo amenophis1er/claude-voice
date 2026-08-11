@@ -7,9 +7,17 @@ export type Preset = "silent" | "chimes" | "summary" | "verbose";
 /** Prefix spoken audio with the project (cwd) name. "auto" = only while other sessions are active. */
 export type AnnounceProject = "always" | "auto" | "off";
 
+/** How much of a finished reply is read aloud. "closing" = the closing
+ * sentence only; "full" = the whole reply, sanitized (code/paths/URLs
+ * stripped). Full pairs best with a local provider — free, streams
+ * sentence-by-sentence, and a new prompt cuts it off instantly. */
+export type SpeechDepth = "closing" | "full";
+
 export interface VoiceConfig {
   /** One knob controls how much is spoken. Default: "summary". */
   preset: Preset;
+  /** WHEN presets decide to speak a reply, HOW MUCH of it is read. */
+  speech: SpeechDepth;
   provider: string;
   voice?: string;
   rate: number;
@@ -31,6 +39,7 @@ export interface VoiceConfig {
 
 const DEFAULTS: VoiceConfig = {
   preset: "summary",
+  speech: "closing",
   provider: "system",
   rate: 1,
   options: {},

@@ -1,7 +1,9 @@
 {
   "name": "@amenophis1er/claude-voice",
-  "version": "0.5.0",
-  "publishConfig": { "access": "public" },
+  "version": "0.5.1",
+  "publishConfig": {
+    "access": "public"
+  },
   "description": "Give Claude Code a voice — selective, tasteful spoken summaries and attention cues. Quiet by default.",
   "repository": {
     "type": "git",
@@ -12,7 +14,12 @@
   "bin": {
     "claude-voice": "dist/cli.js"
   },
-  "files": ["dist", "hooks", ".claude-plugin", "CHANGELOG.md"],
+  "files": [
+    "dist",
+    "hooks",
+    ".claude-plugin",
+    "CHANGELOG.md"
+  ],
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
     "prepack": "npm run build",
@@ -30,7 +37,13 @@
   "engines": {
     "node": ">=20"
   },
-  "keywords": ["claude-code", "tts", "voice", "hooks", "plugin"],
+  "keywords": [
+    "claude-code",
+    "tts",
+    "voice",
+    "hooks",
+    "plugin"
+  ],
   "license": "MIT",
   "devDependencies": {
     "typescript": "^5.7.0",

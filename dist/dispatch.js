@@ -3,7 +3,9 @@ import { readFileSync } from "node:fs";
 import { loadConfig, policyFor } from "./config.js";
 import { mutedByFocus } from "./focus.js";
 import { detachChime, detachSpeak, interrupt, logDebug, markSpoken, playing, throttled, } from "./speak.js";
+import { warmServer } from "./kokoro.js";
 import { clearMilestone, nextMilestone } from "./milestone.js";
+import { recordMetric } from "./metrics.js";
 import { muted } from "./mute.js";
 import { endSession, projectName, shouldAnnounceProject, touchSession, withProjectPrefix, } from "./announce.js";
 import { clampSpokenLength, extractClosingSentence, extractVoiceMarker, sanitizeForSpeech } from "./sanitize.js";
@@ -27,6 +29,10 @@ const INSTRUCTION = [
  * SILENT stop (trivial reply, unheard question) still gets the nudge.
  */
 const IDLE_GRACE_SECONDS = 600;
+/** speech: "full" — read the whole reply, but never a 10-minute audiobook.
+ * ~4000 chars ≈ 4–5 spoken minutes; clamp ends on a sentence boundary and a
+ * new prompt interrupts mid-word anyway. */
+const FULL_SPEECH_MAX_CHARS = 4000;
 async function main() {
     const event = process.argv[2];
     const p = readStdinJson();
@@ -41,11 +47,18 @@ async function main() {
     touchSession(session);
     switch (event) {
         case "instructions":
-            emitAdditionalContext(INSTRUCTION); // SessionStart (synchronous)
+            // In full-speech mode the whole reply is read aloud, so don't shape
+            // replies around a speakable closing sentence — leave them natural.
+            if (cfg.speech !== "full")
+                emitAdditionalContext(INSTRUCTION); // SessionStart (synchronous)
             return;
         case "prompt-submit":
             interrupt(session); // new prompt → cut any in-flight audio
             clearMilestone(session); // new turn → fresh milestone pacing
+            // Pre-warm the local Kokoro server (detached spawn, no waiting): by the
+            // time this task's summary wants audio, the model is already loaded.
+            if (cfg.provider === "kokoro")
+                warmServer();
             return;
         // PostToolUse, verbose preset only: speak Claude's latest short progress
         // remark so a long task can be followed from across the room. Tasteful by
@@ -55,7 +68,7 @@ async function main() {
         case "milestone": {
             if (!policy.speakMilestones)
                 return;
-            if (silenced(cfg))
+            if (silenced(cfg, event))
                 return;
             if (playing(session))
                 return; // never talk over summary/notification/self
@@ -85,29 +98,32 @@ async function main() {
             }
             // expendable: if the speaker is busy, DROP it rather than queue it —
             // a delayed glance is a wrong glance (summaries/notifications queue).
-            detachSpeak(session, spokenText(remark, p.cwd, cfg, session), cfg, { expendable: true });
+            detachSpeak(session, spokenText(remark, p.cwd, cfg, session), cfg, {
+                expendable: true,
+                event,
+            });
             return;
         }
         case "notification": {
-            if (silenced(cfg))
+            if (silenced(cfg, event))
                 return;
             if (p.notification_type === "idle_prompt" && throttled(session, IDLE_GRACE_SECONDS)) {
                 logDebug("notification: skipped idle_prompt (summary spoken recently)");
                 return;
             }
             if (policy.chimeOnNotification)
-                detachChime(session, "attention");
+                detachChime(session, "attention", event);
             if (policy.speakNotification) {
                 const phrase = notificationPhrase(p.notification_type, p.message);
-                detachSpeak(session, spokenText(phrase, p.cwd, cfg, session), cfg);
+                detachSpeak(session, spokenText(phrase, p.cwd, cfg, session), cfg, { event });
             }
             return;
         }
         case "stop": {
-            if (silenced(cfg))
+            if (silenced(cfg, event))
                 return;
             if (policy.chimeOnStop)
-                detachChime(session, "done");
+                detachChime(session, "done", event);
             if (!policy.speakSummary)
                 return;
             const text = typeof p.last_assistant_message === "string" ? p.last_assistant_message : "";
@@ -120,20 +136,26 @@ async function main() {
                 : false;
             if (!marker && !policy.speakAlways && !substantial) {
                 logDebug("stop: skipped (no marker, not substantial)");
+                recordMetric({ t: "skip", ts: Date.now(), event, reason: "not-substantial" });
                 return;
             }
             if (throttled(session, cfg.throttleSeconds)) {
                 logDebug("stop: skipped (throttled)");
+                recordMetric({ t: "skip", ts: Date.now(), event, reason: "throttled" });
                 return;
             }
-            // Claude is taught to end substantial tasks with a speakable closing
-            // sentence, so the message's ending IS the summary.
-            const spoken = marker ?? extractClosingSentence(text);
+            // "closing": Claude is taught to end substantial tasks with a speakable
+            // closing sentence, so the message's ending IS the summary.
+            // "full": read the entire reply, sanitized — code, paths, URLs dropped.
+            const spoken = marker ??
+                (cfg.speech === "full"
+                    ? clampSpokenLength(sanitizeForSpeech(text), FULL_SPEECH_MAX_CHARS)
+                    : extractClosingSentence(text));
             if (!spoken)
                 return;
             markSpoken(session);
             interrupt(session); // a still-playing milestone must not talk over this
-            detachSpeak(session, spokenText(spoken, p.cwd, cfg, session), cfg);
+            detachSpeak(session, spokenText(spoken, p.cwd, cfg, session), cfg, { event });
             return;
         }
         default:
@@ -145,20 +167,22 @@ function spokenText(text, cwd, cfg, session) {
     return shouldAnnounceProject(cfg, session) ? withProjectPrefix(text, projectName(cwd)) : text;
 }
 /** Purposeful mute + quiet hours + focus muting, shared by stop/notification. */
-function silenced(cfg) {
-    if (muted()) {
-        logDebug("silenced: muted on purpose");
-        return true;
-    }
-    if (inQuietHours(cfg)) {
-        logDebug("silenced: quiet hours");
-        return true;
-    }
-    if (mutedByFocus(cfg)) {
-        logDebug("silenced: terminal focused");
-        return true;
-    }
-    return false;
+function silenced(cfg, event) {
+    const reason = muted()
+        ? "muted"
+        : inQuietHours(cfg)
+            ? "quiet-hours"
+            : mutedByFocus(cfg)
+                ? "focus"
+                : undefined;
+    if (!reason)
+        return false;
+    logDebug(`silenced: ${reason}`);
+    // Milestone checks fire on every tool use — recording each would flood the
+    // metrics file with by-design silence. Only real utterance-losses count.
+    if (event !== "milestone")
+        recordMetric({ t: "skip", ts: Date.now(), event, reason });
+    return true;
 }
 /** Tailor the spoken phrase to the notification type when we recognize it. */
 function notificationPhrase(type, message) {
