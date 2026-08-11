@@ -52,17 +52,20 @@ export function buildShortcutPlist(command) {
 `;
 }
 /**
- * The recap invocation with machine-local ABSOLUTE paths — Shortcuts runs
+ * A CLI invocation with machine-local ABSOLUTE paths — Shortcuts runs
  * shell scripts with a bare PATH, so nothing may rely on lookup. Compiled
  * installs point at the vendored runtime (survives npx cache eviction and
  * node version switches), source checkouts at the checkout itself.
  */
-export function recapCommand() {
+function cliCommand(sub) {
     const cli = COMPILED ? join(APP_DIR, "cli.js") : resolve(HERE, "cli.ts");
     if (COMPILED && !existsSync(cli)) {
         throw new Error("vendored runtime not found — run `claude-voice install` (or init) first");
     }
-    return `"${nodePath()}" "${cli}" recap`;
+    return `"${nodePath()}" "${cli}" ${sub}`;
+}
+export function recapCommand() {
+    return cliCommand("recap");
 }
 /**
  * A node path that survives upgrades: process.execPath resolves to Homebrew's
@@ -81,14 +84,22 @@ function nodePath() {
     }
     return process.execPath;
 }
+/** The hotkey-worthy commands: hear a recap; silence a readout mid-word. */
+const SHORTCUTS = {
+    recap: { sub: "recap", name: "Claude recap" },
+    stop: { sub: "stop", name: "Claude voice stop" },
+};
 /** Generate, sign, and open the Shortcut import dialog. Returns the file path. */
-export function createRecapShortcut() {
+export function createVoiceShortcut(kind = "recap") {
+    const spec = SHORTCUTS[kind];
+    if (!spec)
+        throw new Error(`unknown shortcut "${kind}" — use: ${Object.keys(SHORTCUTS).join(", ")}`);
     if (platform() !== "darwin") {
-        throw new Error("Shortcuts is macOS-only — on Linux, bind the recap command with your hotkey daemon (e.g. sxhkd).");
+        throw new Error(`Shortcuts is macOS-only — on Linux, bind \`claude-voice ${spec.sub}\` with your hotkey daemon (e.g. sxhkd).`);
     }
-    const unsigned = join(tmpdir(), "claude-recap-unsigned.shortcut");
-    const signed = join(tmpdir(), "Claude recap.shortcut");
-    writeFileSync(unsigned, buildShortcutPlist(recapCommand()));
+    const unsigned = join(tmpdir(), `claude-${kind}-unsigned.shortcut`);
+    const signed = join(tmpdir(), `${spec.name}.shortcut`);
+    writeFileSync(unsigned, buildShortcutPlist(cliCommand(spec.sub)));
     rmSync(signed, { force: true });
     execFileSync("shortcuts", ["sign", "-i", unsigned, "-o", signed, "-m", "people-who-know-me"]);
     rmSync(unsigned, { force: true });

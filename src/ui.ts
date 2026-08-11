@@ -73,8 +73,18 @@ export interface SelectOption<T> {
   hint?: string;
 }
 
-/** Arrow-key single select; falls back to a numbered prompt without a TTY. */
-export async function select<T>(label: string, options: SelectOption<T>[], initial = 0): Promise<T> {
+/**
+ * Arrow-key single select; falls back to a numbered prompt without a TTY.
+ * `onHighlight` fires on the initially focused option and on every move —
+ * used by the kokoro voice picker to speak each voice as you land on it.
+ * (TTY only: the numbered fallback can't track focus.)
+ */
+export async function select<T>(
+  label: string,
+  options: SelectOption<T>[],
+  initial = 0,
+  onHighlight?: (value: T) => void,
+): Promise<T> {
   if (!isTTY) return selectFallback(label, options, initial);
 
   let index = initial;
@@ -89,6 +99,7 @@ export async function select<T>(label: string, options: SelectOption<T>[], initi
   };
 
   render(true);
+  onHighlight?.(options[index]!.value);
   process.stdout.write("\x1b[?25l"); // hide cursor
   const answer = await new Promise<T>((resolve) => {
     const stdin = process.stdin;
@@ -96,6 +107,7 @@ export async function select<T>(label: string, options: SelectOption<T>[], initi
     stdin.resume();
     const onKey = (buf: Buffer): void => {
       const k = buf.toString();
+      const before = index;
       if (k === "\x1b[A" || k === "k") index = (index - 1 + options.length) % options.length;
       else if (k === "\x1b[B" || k === "j" || k === "\t") index = (index + 1) % options.length;
       else if (k === "\r" || k === "\n") {
@@ -105,6 +117,7 @@ export async function select<T>(label: string, options: SelectOption<T>[], initi
         resolve(options[index]!.value);
         return;
       } else if (k === "\x03") cancel(); // ctrl-c
+      if (index !== before) onHighlight?.(options[index]!.value);
       render(false);
     };
     stdin.on("data", onKey);

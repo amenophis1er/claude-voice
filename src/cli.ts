@@ -7,9 +7,11 @@ import { listProviders } from "./providers/registry.ts";
 import { install, listSystemVoices, uninstall } from "./install.ts";
 import { mute, muteStatus, parseDurationMs, unmute } from "./mute.ts";
 import { formatStats, readMetrics } from "./metrics.ts";
-import { detachChime, detachSpeak } from "./speak.ts";
+import { detachChime, detachSpeak, interruptAll } from "./speak.ts";
+import { isInstalled as kokoroInstalled } from "./kokoro.ts";
+import { installKokoro, kokoroStatus, pickVoice, uninstallKokoro } from "./kokoro-setup.ts";
 import { extractRecap, latestTranscript } from "./recap.ts";
-import { createRecapShortcut } from "./shortcut.ts";
+import { createVoiceShortcut } from "./shortcut.ts";
 import { projectName, withProjectPrefix } from "./announce.ts";
 
 const cmd = process.argv[2];
@@ -28,6 +30,14 @@ switch (cmd) {
     console.log(unmute());
     break;
 
+  // Cut the CURRENT readout mid-word, every session — unlike mute it says
+  // nothing about the future. Made to hang off a hotkey (claude-voice shortcut stop).
+  case "stop": {
+    const n = interruptAll();
+    console.log(n ? "Stopped." : "Nothing was playing.");
+    break;
+  }
+
   case "status": {
     const c = loadConfig();
     console.log(`preset: ${c.preset} · provider: ${c.provider} · ${muteStatus()}`);
@@ -36,7 +46,8 @@ switch (cmd) {
 
   case "list":
     for (const p of listProviders()) {
-      console.log(`${p.id.padEnd(12)} ${p.zeroConfig ? "•" : " "}  ${p.label}`);
+      const note = p.id === "kokoro" && !kokoroInstalled() ? "  (not installed — claude-voice kokoro install)" : "";
+      console.log(`${p.id.padEnd(12)} ${p.zeroConfig ? "•" : " "}  ${p.label}${note}`);
     }
     console.log("\n• = zero-config (no API key needed)");
     break;
@@ -93,7 +104,7 @@ switch (cmd) {
 
   case "shortcut": {
     try {
-      const file = createRecapShortcut();
+      const file = createVoiceShortcut(process.argv[3] ?? "recap");
       console.log(`Opened ${file}`);
       console.log('Click "Add Shortcut", then in its ⓘ details panel: Add Keyboard Shortcut → e.g. ⌃⌥V.');
       console.log("(macOS stores hotkeys per device, so that last step can't be automated.)");
@@ -121,6 +132,43 @@ switch (cmd) {
     await init();
     break;
 
+  // Local neural TTS: install/remove the self-contained Kokoro runtime
+  // (venv + model under ~/.claude/voice/kokoro — nothing global).
+  case "kokoro": {
+    try {
+      switch (process.argv[3]) {
+        case "install":
+          await installKokoro();
+          break;
+        case "uninstall":
+          await uninstallKokoro();
+          break;
+        case "status":
+          console.log(await kokoroStatus());
+          break;
+        case "voice":
+          await pickVoice({ save: true });
+          ui.close();
+          break;
+        default:
+          console.log(
+            [
+              "claude-voice kokoro — local neural TTS (offline, free, no API key)",
+              "",
+              "  claude-voice kokoro install      set up venv + model (~350 MB), pick a voice",
+              "  claude-voice kokoro voice        re-pick the voice (hear each as you browse)",
+              "  claude-voice kokoro status       install state, disk use, server state",
+              "  claude-voice kokoro uninstall    remove everything it installed",
+            ].join("\n"),
+          );
+      }
+    } catch (err) {
+      console.error((err as Error).message);
+      process.exitCode = 1;
+    }
+    break;
+  }
+
   default:
     console.log(
       [
@@ -130,10 +178,12 @@ switch (cmd) {
         "  claude-voice install         wire hooks into ~/.claude/settings.json",
         "  claude-voice uninstall       remove the hooks",
         "  claude-voice list            list TTS providers",
+        "  claude-voice kokoro …        local neural TTS: install · voice · status · uninstall",
         "  claude-voice voices          list system voices",
         "  claude-voice test [text]     synthesize and play a phrase",
         "  claude-voice recap           speak where the latest session stands",
-        "  claude-voice shortcut        macOS: generate a hotkey-ready Shortcut for recap",
+        "  claude-voice stop            cut the current readout mid-word (all sessions)",
+        "  claude-voice shortcut [recap|stop]  macOS: generate a hotkey-ready Shortcut",
         "  claude-voice stats [24h|7d] [--json]  audio latency + outcome metrics",
         "  claude-voice config          show active config + its path",
         "  claude-voice mute [30m|2h|1d]  mute all audio (no duration = until unmute)",
@@ -157,10 +207,23 @@ async function init(): Promise<void> {
     0,
   );
 
+  let speech: import("./config.ts").SpeechDepth = "closing";
+  if (preset === "summary" || preset === "verbose") {
+    speech = await ui.select<import("./config.ts").SpeechDepth>(
+      "When a reply is spoken, how much of it?",
+      [
+        { value: "closing", label: "closing sentence", hint: "one-line spoken wrap-up — recommended" },
+        { value: "full", label: "full reply", hint: "read everything (sanitized) — best with kokoro; new prompt cuts it off" },
+      ],
+      0,
+    );
+  }
+
   const PROVIDER_HINTS: Record<string, string> = {
     system: "no API key, works offline",
+    kokoro: "local neural TTS — offline, free, one-time ~350 MB install",
     elevenlabs: "ElevenLabs — needs an API key",
-    openai: "OpenAI or any OpenAI-compatible server (Kokoro, LocalAI, …)",
+    openai: "OpenAI or any OpenAI-compatible server (LocalAI, self-hosted, …)",
   };
   const provider = await ui.select<string>(
     "Voice provider",
@@ -216,7 +279,16 @@ async function init(): Promise<void> {
   }
 
   let voice = "";
-  if (provider === "system") {
+  if (provider === "kokoro") {
+    // Init owns the config file, so the kokoro flow only reports the voice.
+    if (kokoroInstalled()) {
+      voice = await pickVoice({ save: false });
+    } else if (await ui.confirm("Kokoro isn't installed yet — install now? (~350 MB download)", true)) {
+      voice = (await installKokoro({ writeConfig: false })).voice;
+    } else {
+      ui.step("Kokoro", "skipped — run `claude-voice kokoro install`; system voice speaks until then");
+    }
+  } else if (provider === "system") {
     const voices = listSystemVoices();
     if (voices.length) {
       const curated = voices.slice(0, 7);
@@ -235,7 +307,7 @@ async function init(): Promise<void> {
     voice = await ui.text("Voice id", "blank = provider default");
   }
 
-  const cfg: Partial<VoiceConfig> = { ...existing, preset, provider };
+  const cfg: Partial<VoiceConfig> = { ...existing, preset, speech, provider };
   if (voice) cfg.voice = voice;
   else delete (cfg as Record<string, unknown>).voice;
   if (Object.keys(options).length) cfg.options = options;

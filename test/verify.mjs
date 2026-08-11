@@ -278,4 +278,76 @@ try {
   rmSync(metricsDir, { recursive: true, force: true });
 }
 
+// ── kokoro: pure helpers ─────────────────────────────────────────────────────
+{
+  const { pythonVersionOk, formatBytes, SERVER_PY, MODEL_VARIANTS } = await import("../src/kokoro.ts");
+  // onnxruntime wheel range: 3.10–3.13; too old, too new, and garbage all fail
+  assert.ok(pythonVersionOk("Python 3.12.4"));
+  assert.ok(pythonVersionOk("Python 3.10.0"));
+  assert.ok(!pythonVersionOk("Python 3.9.18"));
+  assert.ok(!pythonVersionOk("Python 3.14.0"));
+  assert.ok(!pythonVersionOk("Python 2.7.18"));
+  assert.ok(!pythonVersionOk("zsh: command not found"));
+
+  assert.equal(formatBytes(88_000_000), "88 MB");
+  assert.equal(formatBytes(1_500_000_000), "1.5 GB");
+  assert.equal(formatBytes(512), "512 B");
+
+  // the embedded server must keep serving the endpoints the provider calls
+  assert.ok(SERVER_PY.includes('"/synth"'), "server handles /synth");
+  assert.ok(SERVER_PY.includes('"/health"'), "server handles /health");
+  // and must prefer whichever model the installer downloads
+  for (const v of Object.values(MODEL_VARIANTS)) {
+    assert.ok(SERVER_PY.includes(v.file), `server knows ${v.file}`);
+  }
+}
+
+// ── speech: "full" — a whole markdown reply must sanitize into clean prose ───
+{
+  const reply = [
+    "**What you'll feel:** the wait before the first word.",
+    "",
+    "- **Cold server.** It respawns in ~2 s. See `ensureServer()` in /Users/x/kokoro.ts.",
+    "- Check https://example.com/docs for details.",
+    "",
+    "```bash",
+    "claude-voice stats",
+    "```",
+    "",
+    "So: use it for a day and let the stats settle.",
+  ].join("\n");
+  const full = clampSpokenLength(sanitizeForSpeech(reply), 4000);
+  // everything speakable survives — start AND end, not just the closing line
+  assert.ok(full.includes("the wait before the first word"), full);
+  assert.ok(full.includes("use it for a day"), full);
+  // nothing unspeakable leaks
+  assert.ok(!/[`*#]|\/Users|https:|claude-voice stats/.test(full), `leaked: ${full}`);
+  // defaults: existing configs without a speech field read as "closing"
+  const { loadConfig: loadCfg } = await import("../src/config.ts");
+  assert.ok(["closing", "full"].includes(loadCfg().speech));
+}
+
+// ── kokoro: sentence chunking for streamed synthesis ─────────────────────────
+{
+  const { splitSentences } = await import("../src/providers/kokoro.ts");
+  // multi-sentence prose splits at sentence ends
+  assert.deepEqual(
+    splitSentences("The parser is refactored and tests pass. Coverage went up by three percent."),
+    ["The parser is refactored and tests pass.", "Coverage went up by three percent."],
+  );
+  // tiny fragments merge forward instead of becoming choppy micro-chunks
+  assert.deepEqual(
+    splitSentences("Done. All forty-two tests are passing and the build is green."),
+    ["Done. All forty-two tests are passing and the build is green."],
+  );
+  // a tiny trailing fragment merges backward
+  assert.deepEqual(
+    splitSentences("Everything is deployed and the dashboards look healthy. Nice."),
+    ["Everything is deployed and the dashboards look healthy. Nice."],
+  );
+  // single sentence passes through untouched; empty stays empty
+  assert.deepEqual(splitSentences("Claude voice is working."), ["Claude voice is working."]);
+  assert.deepEqual(splitSentences(""), []);
+}
+
 console.log("ALL ASSERTIONS PASSED");

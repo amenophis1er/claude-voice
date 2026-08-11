@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import { loadConfig, policyFor } from "./config.js";
 import { mutedByFocus } from "./focus.js";
 import { detachChime, detachSpeak, interrupt, logDebug, markSpoken, playing, throttled, } from "./speak.js";
+import { warmServer } from "./kokoro.js";
 import { clearMilestone, nextMilestone } from "./milestone.js";
 import { recordMetric } from "./metrics.js";
 import { muted } from "./mute.js";
@@ -28,6 +29,10 @@ const INSTRUCTION = [
  * SILENT stop (trivial reply, unheard question) still gets the nudge.
  */
 const IDLE_GRACE_SECONDS = 600;
+/** speech: "full" — read the whole reply, but never a 10-minute audiobook.
+ * ~4000 chars ≈ 4–5 spoken minutes; clamp ends on a sentence boundary and a
+ * new prompt interrupts mid-word anyway. */
+const FULL_SPEECH_MAX_CHARS = 4000;
 async function main() {
     const event = process.argv[2];
     const p = readStdinJson();
@@ -42,11 +47,18 @@ async function main() {
     touchSession(session);
     switch (event) {
         case "instructions":
-            emitAdditionalContext(INSTRUCTION); // SessionStart (synchronous)
+            // In full-speech mode the whole reply is read aloud, so don't shape
+            // replies around a speakable closing sentence — leave them natural.
+            if (cfg.speech !== "full")
+                emitAdditionalContext(INSTRUCTION); // SessionStart (synchronous)
             return;
         case "prompt-submit":
             interrupt(session); // new prompt → cut any in-flight audio
             clearMilestone(session); // new turn → fresh milestone pacing
+            // Pre-warm the local Kokoro server (detached spawn, no waiting): by the
+            // time this task's summary wants audio, the model is already loaded.
+            if (cfg.provider === "kokoro")
+                warmServer();
             return;
         // PostToolUse, verbose preset only: speak Claude's latest short progress
         // remark so a long task can be followed from across the room. Tasteful by
@@ -132,9 +144,13 @@ async function main() {
                 recordMetric({ t: "skip", ts: Date.now(), event, reason: "throttled" });
                 return;
             }
-            // Claude is taught to end substantial tasks with a speakable closing
-            // sentence, so the message's ending IS the summary.
-            const spoken = marker ?? extractClosingSentence(text);
+            // "closing": Claude is taught to end substantial tasks with a speakable
+            // closing sentence, so the message's ending IS the summary.
+            // "full": read the entire reply, sanitized — code, paths, URLs dropped.
+            const spoken = marker ??
+                (cfg.speech === "full"
+                    ? clampSpokenLength(sanitizeForSpeech(text), FULL_SPEECH_MAX_CHARS)
+                    : extractClosingSentence(text));
             if (!spoken)
                 return;
             markSpoken(session);
