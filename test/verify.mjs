@@ -67,6 +67,16 @@ const s = sanitizeForSpeech(
 );
 assert.ok(!/`|\/Users|https:|##|\*\*|```|<!--/.test(s), `leaked: ${s}`);
 
+// inline code: load-bearing words are spoken; path/code-like spans still drop
+// (regression: "switch the preset to `verbose`" was spoken as "switch the preset to")
+const inline = sanitizeForSpeech(
+  "Your preset is `summary`, but milestones only speak on `verbose` — edit `~/.claude/voice/config.json` or re-run `init`.",
+);
+assert.ok(/summary.*verbose.*init/.test(inline), `words dropped: ${inline}`);
+assert.ok(!/config\.json|claude|~|\//.test(inline), `path leaked: ${inline}`);
+const codey = sanitizeForSpeech("set `options = {a: 1}` with `PATH=/usr/bin` via `x | y`");
+assert.ok(!/options|PATH|usr/.test(codey), `code leaked: ${codey}`);
+
 // clamp caps length
 assert.ok(clampSpokenLength("a. ".repeat(400)).length <= 350);
 

@@ -36,6 +36,16 @@ export function extractClosingSentence(text: string, maxChars = 350): string {
 }
 
 /**
+ * Inline code is often a load-bearing word — "switch the preset to `verbose`"
+ * with the span dropped becomes "switch the preset to", which guts the
+ * sentence. Speak spans that are short and word-like; anything with path or
+ * code punctuation (slashes, braces, $, =, …) still reads terribly aloud and
+ * is dropped. Kept spans flow through the later rules, so a URL or IP inside
+ * one can't sneak back in.
+ */
+const SPEAKABLE_CODE = /^[\w .,:-]{1,40}$/;
+
+/**
  * Turn message text into something worth hearing: drop code, paths, URLs, and
  * markdown noise that reads fine but sounds terrible spoken aloud.
  */
@@ -43,7 +53,7 @@ export function sanitizeForSpeech(text: string): string {
   return text
     .replace(/<!--[\s\S]*?-->/g, " ") // hidden markers / html comments
     .replace(/```[\s\S]*?```/g, " ") // fenced code
-    .replace(/`[^`]*`/g, " ") // inline code
+    .replace(/`([^`\n]*)`/g, (_, code) => (SPEAKABLE_CODE.test(code) ? ` ${code} ` : " ")) // inline code
     .replace(/!?\[([^\]]*)\]\([^)]*\)/g, "$1") // links/images → label
     .replace(/https?:\/\/\S+/g, " ") // bare URLs
     .replace(/\B(?:~|\.{0,2})\/[^\s)]+/g, " ") // file paths
