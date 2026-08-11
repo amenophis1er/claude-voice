@@ -11,7 +11,7 @@ const MAX_TRANSCRIPT_BYTES = 20 * 1024 * 1024;
  * depend on this for correctness — the spoken text itself comes from the stable
  * `last_assistant_message` hook field, not from here.
  */
-export function readLastTurn(transcriptPath) {
+export function readLastTurn(transcriptPath, now = Date.now()) {
     let lines;
     try {
         if (statSync(transcriptPath).size > MAX_TRANSCRIPT_BYTES)
@@ -55,7 +55,11 @@ export function readLastTurn(transcriptPath) {
             }
         }
     }
-    const durationSeconds = stamps.length >= 2 ? (Math.max(...stamps) - Math.min(...stamps)) / 1000 : 0;
+    // Measured to NOW, not to the last entry: hooks fire while the turn is
+    // still live (PreToolUse arrives before a possibly-minutes-long tool runs),
+    // and the question is "how long has this turn been going", not "how much
+    // span do the recorded entries cover".
+    const durationSeconds = stamps.length ? (now - Math.min(...stamps)) / 1000 : 0;
     return { lastAssistantText, lastAssistantTs, toolCalls, durationSeconds };
 }
 /** A type:"user" entry typed by the human, as opposed to a wrapped tool_result. */

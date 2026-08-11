@@ -27,7 +27,14 @@ const WIRING: Array<[string, string, boolean]> = [
   ["UserPromptSubmit", "prompt-submit", false], // sync: fast interrupt
   ["Stop", "stop", true],
   ["Notification", "notification", true],
-  ["PostToolUse", "milestone", true], // verbose preset's mid-task narration
+  // Mid-task narration (verbose preset) fires on BOTH tool-boundary events.
+  // PreToolUse is the real-time path: a progress remark is emitted right
+  // before the next tool starts, and waiting for that tool to finish
+  // (PostToolUse only) delays the remark by the tool's whole runtime.
+  // PostToolUse still matters: it catches a remark made after a burst of
+  // tools when no further tool follows soon. Pacing/dedup lives in dispatch.
+  ["PreToolUse", "milestone", true],
+  ["PostToolUse", "milestone", true],
   ["SessionEnd", "session-end", false], // sync: just unlinks the heartbeat file
 ];
 

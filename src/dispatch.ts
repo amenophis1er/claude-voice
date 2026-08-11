@@ -80,11 +80,14 @@ async function main() {
       if (cfg.provider === "kokoro") warmServer();
       return;
 
-    // PostToolUse, verbose preset only: speak Claude's latest short progress
-    // remark so a long task can be followed from across the room. Tasteful by
-    // construction — only once the turn is already "substantial", never while
-    // other audio plays, at most one per milestoneIntervalSeconds, never the
-    // same remark twice.
+    // Pre+PostToolUse, verbose preset only: speak Claude's latest short
+    // progress remark so a long task can be followed from across the room.
+    // PreToolUse is what makes it feel live — a remark is typically emitted
+    // right before the next tool call, so this fires while it's still on
+    // screen instead of after that tool (possibly minutes later) finishes.
+    // Tasteful by construction — only once the turn is already "substantial",
+    // never while other audio plays, at most one per milestoneIntervalSeconds,
+    // never the same remark twice.
     case "milestone": {
       if (!policy.speakMilestones) return;
       if (silenced(cfg, event)) return;

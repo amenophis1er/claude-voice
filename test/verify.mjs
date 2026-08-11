@@ -88,11 +88,17 @@ const ipClean = sanitizeForSpeech(egress);
 assert.ok(!/\d+\.\d+\.\d+\.\d+/.test(ipClean), `IP leaked: ${ipClean}`);
 assert.ok(!/\(\s*[,;]/.test(ipClean), `punctuation husk: ${ipClean}`);
 
-// transcript stats: best-effort, 3 tool calls, ~45s
+// transcript stats: best-effort, 3 tool calls; duration runs from turn start
+// to NOW (hooks fire mid-turn — PreToolUse arrives before a long tool runs)
 const fixture = new URL("./fixtures/transcript.jsonl", import.meta.url).pathname;
-const t = readLastTurn(fixture);
+const t = readLastTurn(fixture, Date.parse("2026-08-02T10:00:45Z"));
 assert.equal(t.toolCalls, 3);
-assert.ok(t.durationSeconds >= 40, `dur=${t.durationSeconds}`);
+assert.ok(t.durationSeconds >= 40 && t.durationSeconds <= 46, `dur=${t.durationSeconds}`);
+// mid-turn glance: the clock runs from the turn's first entry (10:00:05) to
+// `now` — the substantial gate must not wait for entries to accumulate
+// after a long tool
+const mid = readLastTurn(fixture, Date.parse("2026-08-02T10:00:20Z"));
+assert.ok(mid.durationSeconds >= 14 && mid.durationSeconds <= 16, `mid dur=${mid.durationSeconds}`);
 assert.ok(t.lastAssistantText.length > 0, "fixture has a final assistant remark");
 assert.ok(t.lastAssistantTs > 0, "remark timestamp parsed — milestone freshness gate needs it");
 
