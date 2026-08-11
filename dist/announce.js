@@ -1,6 +1,7 @@
 import { mkdirSync, readdirSync, statSync, unlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
+import { sessionTabFocused, sessionTabInfo } from "./tab.js";
 /**
  * Project announcement. With several Claude Code sessions running at once, a
  * bare "Task complete" doesn't say WHICH project finished — so spoken text can
@@ -8,6 +9,12 @@ import { basename, join } from "node:path";
  * complete."). The `announceProject` config field controls it: "always",
  * "off", or "auto" — prefix only while at least one OTHER session is active,
  * tracked by a per-session heartbeat file that every hook event refreshes.
+ *
+ * "auto" gets one refinement on macOS: if the user is looking straight at THIS
+ * session's tab right now (its terminal is frontmost AND its tab is selected),
+ * the prefix is noise — skip it. Detection lives in tab.ts and fails open
+ * (prefix) whenever it can't tell: no Automation permission, non-scriptable
+ * terminal, tmux, ssh, Linux.
  */
 /** A session counts as active if one of its hooks fired within this window. */
 const ACTIVE_WINDOW_MS = 30 * 60 * 1000;
@@ -28,12 +35,33 @@ export function projectName(cwd) {
 export function withProjectPrefix(text, name) {
     return name ? `${name}: ${text}` : text;
 }
-export function shouldAnnounceProject(cfg, session) {
+export function shouldAnnounceProject(cfg, session, ownTabFocused) {
     if (cfg.announceProject === "always")
         return true;
     if (cfg.announceProject === "off")
         return false;
-    return otherSessionsActive(session); // "auto"
+    // "auto": prefix only while another session is live — AND not while the
+    // user is looking straight at this session's own tab (you already know).
+    if (!otherSessionsActive(session))
+        return false;
+    return !ownTabInFocus(session, ownTabFocused);
+}
+/** True when this session's terminal tab is the selected one in the frontmost
+ * window — you are looking at it, so the project-name prefix adds nothing.
+ * Fail open: any uncertainty (no tty, no scriptable terminal, no permission)
+ * returns false — the prefix is never wrongly suppressed. Injectable for tests;
+ * the default resolves via tab.ts. */
+export function ownTabInFocus(session, detector = defaultIsFocused) {
+    try {
+        return detector() === true;
+    }
+    catch {
+        return false; // detection must never throw — prefix is safe
+    }
+}
+function defaultIsFocused() {
+    const info = sessionTabInfo(process.pid);
+    return info ? sessionTabFocused(info) : undefined;
 }
 /** Refresh this session's heartbeat (every hook event lands here). */
 export function touchSession(session) {

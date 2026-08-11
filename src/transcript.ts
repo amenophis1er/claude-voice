@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { readFileSync, statSync } from "node:fs";
 
 interface TurnStats {
   lastAssistantText: string;
@@ -7,6 +7,11 @@ interface TurnStats {
   toolCalls: number;
   durationSeconds: number;
 }
+
+/** Transcripts grow unbounded; reading one synchronously on every hook event
+ * costs the hook budget. Beyond this, skip the heuristic entirely — the
+ * spoken text itself comes from last_assistant_message and is unaffected. */
+const MAX_TRANSCRIPT_BYTES = 20 * 1024 * 1024;
 
 /**
  * Best-effort read of the just-finished turn from a Claude Code transcript
@@ -19,6 +24,7 @@ interface TurnStats {
 export function readLastTurn(transcriptPath: string): TurnStats | undefined {
   let lines: string[];
   try {
+    if (statSync(transcriptPath).size > MAX_TRANSCRIPT_BYTES) return undefined;
     lines = readFileSync(transcriptPath, "utf8").split("\n").filter(Boolean);
   } catch {
     return undefined;
