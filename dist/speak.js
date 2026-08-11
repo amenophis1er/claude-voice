@@ -367,28 +367,50 @@ function sleep(ms) {
     return new Promise((r) => setTimeout(r, ms));
 }
 /** Cross-platform playback of an audio file. Also used by the kokoro setup
- * flow (smoke test + voice previews), hence exported. */
+ * flow (smoke test + voice previews), hence exported. On Linux, tries each
+ * known player in order — paplay (Pulse/PipeWire) then aplay (bare ALSA). */
 export function playFile(audioFile) {
-    const [cmd, args] = playerCommand(audioFile);
     return new Promise((resolve) => {
-        const child = spawn(cmd, args, { stdio: "ignore" });
-        child.on("exit", () => resolve());
-        child.on("error", (e) => {
-            logDebug(`playback failed (${cmd}): ${e.message}`);
-            resolve();
-        });
+        const candidates = playerCommands(audioFile);
+        const tryNext = (i) => {
+            if (i >= candidates.length) {
+                logDebug(`playback failed: no player available for ${audioFile}`);
+                resolve();
+                return;
+            }
+            const [cmd, args] = candidates[i];
+            const child = spawn(cmd, args, { stdio: "ignore" });
+            child.on("exit", (code) => {
+                if (code === 0 || i === candidates.length - 1)
+                    resolve();
+                else
+                    tryNext(i + 1); // player ran but rejected the file — try the next
+            });
+            child.on("error", () => tryNext(i + 1)); // ENOENT: player not installed
+        };
+        tryNext(0);
     });
 }
-export function playerCommand(file) {
+/** All playback candidates for this platform, in preference order. */
+function playerCommands(file) {
     switch (platform()) {
         case "darwin":
-            return ["afplay", [file]];
+            return [["afplay", [file]]];
         case "win32":
-            return ["powershell", ["-NoProfile", "-c", `(New-Object Media.SoundPlayer '${file}').PlaySync()`]];
+            return [
+                ["powershell", ["-NoProfile", "-c", `(New-Object Media.SoundPlayer '${file}').PlaySync()`]],
+            ];
         default:
-            // Linux: try paplay; players are probed at runtime via error fallthrough.
-            return ["paplay", [file]];
+            return [
+                ["paplay", [file]],
+                ["aplay", [file]],
+            ];
     }
+}
+/** First-choice playback command for this platform. Used by kokoro-setup's
+ * voice previews (which spawn and kill the player themselves). */
+export function playerCommand(file) {
+    return playerCommands(file)[0];
 }
 function cleanupOldAudio() {
     const cutoff = now() - 10 * 60 * 1000;

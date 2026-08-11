@@ -1,4 +1,5 @@
 import { writeFile } from "node:fs/promises";
+import { platform } from "node:os";
 import { join } from "node:path";
 import { resolveApiKey } from "./apikey.ts";
 import type { SynthesizeInput, SynthesizeResult, TtsProvider } from "./types.ts";
@@ -29,6 +30,11 @@ export const openAiProvider: TtsProvider = {
     const custom = baseUrl !== DEFAULT_BASE_URL;
     const model = (input.options?.model as string) ?? (custom ? undefined : DEFAULT_MODEL);
 
+    // Windows playback (Media.SoundPlayer) only supports WAV — request it on
+    // win32 so the audio file is actually playable there. macOS/Linux ignore.
+    const wantsWav = platform() === "win32";
+    const ext = wantsWav ? "wav" : "mp3";
+
     const res = await fetch(`${baseUrl}/audio/speech`, {
       method: "POST",
       headers: {
@@ -39,7 +45,7 @@ export const openAiProvider: TtsProvider = {
         ...(model ? { model } : {}),
         ...(input.voice || !custom ? { voice: input.voice ?? DEFAULT_VOICE } : {}),
         input: input.text,
-        response_format: "mp3",
+        response_format: ext,
         speed: input.rate ?? 1,
       }),
       signal: AbortSignal.timeout(15_000),
@@ -47,7 +53,7 @@ export const openAiProvider: TtsProvider = {
     if (!res.ok) {
       throw new Error(`OpenAI TTS ${res.status}: ${await res.text()}`);
     }
-    const audioFile = join(input.outDir, `voice-${process.pid}-${counter++}.mp3`);
+    const audioFile = join(input.outDir, `voice-${process.pid}-${counter++}.${ext}`);
     await writeFile(audioFile, Buffer.from(await res.arrayBuffer()));
     return { audioFile };
   },

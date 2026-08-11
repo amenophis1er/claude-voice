@@ -1,4 +1,8 @@
-import { readFileSync } from "node:fs";
+import { readFileSync, statSync } from "node:fs";
+/** Transcripts grow unbounded; reading one synchronously on every hook event
+ * costs the hook budget. Beyond this, skip the heuristic entirely — the
+ * spoken text itself comes from last_assistant_message and is unaffected. */
+const MAX_TRANSCRIPT_BYTES = 20 * 1024 * 1024;
 /**
  * Best-effort read of the just-finished turn from a Claude Code transcript
  * (JSONL), used ONLY for the "was this substantial?" heuristic (tool count +
@@ -10,6 +14,8 @@ import { readFileSync } from "node:fs";
 export function readLastTurn(transcriptPath) {
     let lines;
     try {
+        if (statSync(transcriptPath).size > MAX_TRANSCRIPT_BYTES)
+            return undefined;
         lines = readFileSync(transcriptPath, "utf8").split("\n").filter(Boolean);
     }
     catch {
