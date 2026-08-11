@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.6.1 — 2026-08-11
+
+- **Real-time milestones:** mid-task remarks (verbose preset) are now spoken
+  while they're still on screen. The milestone check fires on PreToolUse —
+  the moment a remark is emitted, right before the next tool starts — instead
+  of only after that tool (possibly minutes long) finished. The turn-duration
+  heuristic also clocks to *now* rather than the span of recorded transcript
+  entries, so the "substantial" gate passes in real time during a long first
+  tool. Existing installs: re-run `init` (or update the plugin) to pick up
+  the new hook wiring.
+
 ## 0.6.0 — 2026-08-11
 
 - **Smarter project prefix (`announceProject: "auto"`):** when several sessions
