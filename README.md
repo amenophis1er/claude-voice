@@ -98,10 +98,10 @@ needed) faster than real time — neural-voice quality with no API key, no
 network, no per-word cost:
 
 ```bash
-claude-voice kokoro install      # venv + model under ~/.claude/voice/kokoro
-claude-voice kokoro voice        # re-pick the voice — each speaks as you browse
-claude-voice kokoro status       # install state, disk use, server state
-claude-voice kokoro uninstall    # removes everything it installed
+npx @amenophis1er/claude-voice kokoro install    # venv + model under ~/.claude/voice/kokoro
+npx @amenophis1er/claude-voice kokoro voice      # re-pick the voice — each speaks as you browse
+npx @amenophis1er/claude-voice kokoro status     # install state, disk use, server state
+npx @amenophis1er/claude-voice kokoro uninstall  # removes everything it installed
 ```
 
 The install is self-contained under `~/.claude/voice/kokoro` (a private
@@ -112,7 +112,7 @@ PATH, or [`uv`](https://docs.astral.sh/uv/) (preferred — it fetches its own).
 
 Synthesis runs through a tiny localhost server that starts on demand, is
 pre-warmed when you submit a prompt, and exits by itself after 10 idle
-minutes. Warm latency is a few hundred milliseconds (`claude-voice stats`
+minutes. Warm latency is a few hundred milliseconds (`npx @amenophis1er/claude-voice stats`
 shows it as `synthesis kokoro`). Uninstalling deletes that one directory and
 points config back at the system voice — nothing else to clean up.
 
