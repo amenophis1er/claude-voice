@@ -1,5 +1,24 @@
 # Changelog
 
+## 0.6.0 — 2026-08-11
+
+- **Smarter project prefix (`announceProject: "auto"`):** when several sessions
+  run at once, the spoken project name exists to tell windows apart — but if
+  you're looking straight at *that* session's own tab (Terminal.app or iTerm2
+  on macOS), the prefix is now skipped: you're looking at it, the name adds
+  nothing. Detection walks the process tree to the session's tty, then asks
+  the terminal via AppleScript which tab is selected. Everything fails open —
+  no Automation permission, tmux, ssh, and non-scriptable terminals (VS Code,
+  Ghostty, …) keep the prefix exactly as before.
+- **Windows: cloud-voice audio actually plays.** The Windows playback path
+  (`Media.SoundPlayer`) is WAV-only, so OpenAI/ElevenLabs MP3 output was
+  silently unplayable — the OpenAI provider now requests WAV on win32.
+- **Linux playback fallback:** tries `paplay`, then `aplay`, so bare-ALSA
+  systems without PulseAudio/PipeWire are covered.
+- **Transcript size guard:** the "was this substantial?" heuristic skips
+  transcripts over 20 MB instead of reading them synchronously on every hook
+  event. Spoken text is unaffected — it never came from the transcript.
+
 ## 0.5.1 — 2026-08-11
 
 - **Kokoro — free, offline neural TTS:** new `kokoro` provider running a small
