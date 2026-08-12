@@ -88,13 +88,21 @@ export async function select<T>(
   if (!isTTY) return selectFallback(label, options, initial);
 
   let index = initial;
+  // Cursor-up by LOGICAL lines breaks the moment an option wraps: the count
+  // comes up short, the stale question line survives above the menu, and every
+  // keypress prints another ghost copy. Count terminal ROWS the way text()
+  // does, and remember how many the last render actually used.
+  let renderedRows = 0;
   const render = (first: boolean): void => {
-    if (!first) out(`\x1b[${options.length + 1}A`); // cursor up to re-render in place
+    if (!first) out(`\x1b[${renderedRows}A`); // cursor up to re-render in place
     out(`\r\x1b[J${bold(label)}\n`);
+    renderedRows = terminalRows(label);
     for (let i = 0; i < options.length; i++) {
       const o = options[i]!;
       const line = i === index ? `${cyan("❯")} ${bold(o.label)}` : `  ${o.label}`;
-      out(`${line}${o.hint ? ` ${dim(o.hint)}` : ""}\n`);
+      const full = `${line}${o.hint ? ` ${dim(o.hint)}` : ""}`;
+      out(`${full}\n`);
+      renderedRows += terminalRows(full);
     }
   };
 
@@ -122,10 +130,16 @@ export async function select<T>(
     };
     stdin.on("data", onKey);
   });
-  out(`\x1b[${options.length + 1}A\r\x1b[J`); // collapse the menu
+  out(`\x1b[${renderedRows}A\r\x1b[J`); // collapse the menu
   process.stdout.write("\x1b[?25h");
   step(label, options.find((o) => o.value === answer)!.label);
   return answer;
+}
+
+/** How many terminal rows one printed line occupies once it wraps. */
+export function terminalRows(line: string, cols = process.stdout.columns || 80): number {
+  const visible = line.replace(/\x1b\[[0-9;]*m/g, "").length;
+  return Math.max(1, Math.ceil(visible / cols));
 }
 
 async function selectFallback<T>(label: string, options: SelectOption<T>[], initial: number): Promise<T> {
@@ -161,10 +175,8 @@ export async function text(
     rl.close();
     // Rewind as many terminal rows as the prompt + typed input wrapped into,
     // else long inputs (URLs, pasted keys) leave duplicate ghost lines behind.
-    const cols = process.stdout.columns || 80;
-    const visible = prompt.replace(/\x1b\[[0-9;]*m/g, "").length + raw.length;
-    const rows = Math.max(1, Math.ceil((visible + 1) / cols));
-    out(`\x1b[${rows}A\r\x1b[J`);
+    // (+1 column for the cursor sitting after the typed text.)
+    out(`\x1b[${terminalRows(`${prompt}${raw} `)}A\r\x1b[J`);
     step(label, mask ? mask(raw || placeholder) : raw || placeholder);
   } else {
     raw = await pipedAnswer(prompt);

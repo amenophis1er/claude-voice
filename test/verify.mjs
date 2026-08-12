@@ -11,6 +11,7 @@ import {
 import { parseDurationMs } from "../src/mute.ts";
 import { readLastTurn } from "../src/transcript.ts";
 import { policyFor } from "../src/config.ts";
+import { terminalRows } from "../src/ui.ts";
 import {
   endSession,
   projectName,
@@ -111,6 +112,15 @@ const mid = readLastTurn(fixture, Date.parse("2026-08-02T10:00:20Z"));
 assert.ok(mid.durationSeconds >= 14 && mid.durationSeconds <= 16, `mid dur=${mid.durationSeconds}`);
 assert.ok(t.lastAssistantText.length > 0, "fixture has a final assistant remark");
 assert.ok(t.lastAssistantTs > 0, "remark timestamp parsed — milestone freshness gate needs it");
+
+// terminal row math: wrapped select options must be counted as multiple rows
+// (regression: an option longer than the terminal width left a ghost copy of
+// the question line behind on every arrow keypress)
+assert.equal(terminalRows("a".repeat(80), 80), 1);
+assert.equal(terminalRows("a".repeat(81), 80), 2);
+assert.equal(terminalRows("a".repeat(200), 80), 3);
+assert.equal(terminalRows("\x1b[1mbold\x1b[0m", 80), 1); // ANSI codes take no width
+assert.equal(terminalRows("", 80), 1);
 
 // mute duration parsing
 assert.equal(parseDurationMs("30m"), 30 * 60_000);
