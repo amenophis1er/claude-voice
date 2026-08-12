@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.6.3 — 2026-08-11
+
+- **`init` picker: no more duplicated prompt lines.** The arrow-key select
+  redrew by logical lines, so an option wider than the terminal (which wraps
+  onto a second row) left a ghost copy of the question above the menu on
+  every keypress. Redraws now count actual terminal rows, ANSI- and
+  wrap-aware.
+
 ## 0.6.2 — 2026-08-11
 
 - **Inline code words are spoken again:** the sanitizer dropped every
