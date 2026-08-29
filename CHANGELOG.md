@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.6.4 — 2026-08-29
+
+- **No more "Claude is waiting for you" while background agents run.** Claude
+  Code fires its idle notification even when the turn ended waiting on a
+  background task — but nothing is user-actionable then; Claude resumes by
+  itself when the task lands. The idle nudge (chime and speech) is now
+  skipped while current-turn background launches are still unresolved in the
+  transcript. Fails toward the old behavior: any read or schema problem and
+  the nudge speaks as before.
+- **Agent-driven turns keep their spoken summaries.** Background-task
+  completion notifications were mistaken for human prompts, resetting the
+  turn boundary — a long turn that resumed after an agent finished could
+  undercount its stats and look too trivial to summarize aloud.
+
 ## 0.6.3 — 2026-08-11
 
 - **`init` picker: no more duplicated prompt lines.** The arrow-key select
