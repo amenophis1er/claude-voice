@@ -1,0 +1,8 @@
+{"type":"user","timestamp":"2026-08-02T11:00:00Z","message":{"content":[{"type":"text","text":"review the branch"}]}}
+{"type":"assistant","timestamp":"2026-08-02T11:00:05Z","message":{"content":[{"type":"tool_use","name":"Skill"}]}}
+{"type":"user","timestamp":"2026-08-02T11:00:06Z","message":{"content":[{"type":"tool_result","content":"Skill \"code-review\" launched (forked execution, running in the background)."}]},"toolUseResult":{"success":true,"status":"forked","background":true,"agentId":"agentaaa111"}}
+{"type":"assistant","timestamp":"2026-08-02T11:00:10Z","message":{"content":[{"type":"tool_use","name":"Bash"}]}}
+{"type":"user","timestamp":"2026-08-02T11:00:11Z","message":{"content":[{"type":"tool_result","content":"Command running in background with ID: bashbbb222."}]},"toolUseResult":{"stdout":"","backgroundTaskId":"bashbbb222"}}
+{"type":"assistant","timestamp":"2026-08-02T11:00:15Z","message":{"content":[{"type":"text","text":"Both reviews are running, I'll report when they land."}]}}
+{"type":"user","timestamp":"2026-08-02T11:02:00Z","origin":{"kind":"task-notification"},"promptSource":"system","message":{"content":"<task-notification>\n<task-id>bashbbb222</task-id>\n<status>completed</status>\n<summary>Background command completed (exit code 0)</summary>\n</task-notification>"}}
+{"type":"assistant","timestamp":"2026-08-02T11:02:10Z","message":{"content":[{"type":"text","text":"The command review came back clean, still waiting on the agent."}]}}

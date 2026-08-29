@@ -9,7 +9,7 @@ import {
   clampSpokenLength,
 } from "../src/sanitize.ts";
 import { parseDurationMs } from "../src/mute.ts";
-import { readLastTurn } from "../src/transcript.ts";
+import { pendingBackgroundTasks, readLastTurn } from "../src/transcript.ts";
 import { policyFor } from "../src/config.ts";
 import { terminalRows } from "../src/ui.ts";
 import {
@@ -112,6 +112,46 @@ const mid = readLastTurn(fixture, Date.parse("2026-08-02T10:00:20Z"));
 assert.ok(mid.durationSeconds >= 14 && mid.durationSeconds <= 16, `mid dur=${mid.durationSeconds}`);
 assert.ok(t.lastAssistantText.length > 0, "fixture has a final assistant remark");
 assert.ok(t.lastAssistantTs > 0, "remark timestamp parsed — milestone freshness gate needs it");
+
+// background tasks: idle nudge must know Claude is waiting on an agent, not
+// the user. Fixture launches a bg skill (agentaaa111) and a bg command
+// (bashbbb222); only the command's task-notification has arrived.
+const bgFixture = new URL("./fixtures/transcript-background.jsonl", import.meta.url).pathname;
+assert.equal(pendingBackgroundTasks(bgFixture), 1); // agent still out
+assert.equal(pendingBackgroundTasks("/nonexistent/transcript.jsonl"), undefined); // best-effort
+assert.equal(pendingBackgroundTasks(fixture), 0); // plain turn, nothing launched
+{
+  // once the agent's notification lands too, nothing is pending
+  const resolvedCopy = join(tmpdir(), `claude-voice-verify-bg-${process.pid}.jsonl`);
+  const agentDone = JSON.stringify({
+    type: "user",
+    timestamp: "2026-08-02T11:05:00Z",
+    origin: { kind: "task-notification" },
+    promptSource: "system",
+    message: { content: "<task-notification>\n<task-id>agentaaa111</task-id>\n<status>completed</status>\n</task-notification>" },
+  });
+  writeFileSync(resolvedCopy, readFileSync(bgFixture, "utf8") + agentDone + "\n");
+  assert.equal(pendingBackgroundTasks(resolvedCopy), 0);
+
+  // scoped to the current turn: a new human prompt orphans the earlier
+  // launch (killed tasks / dev servers never notify — counting them would
+  // mute the idle nudge for the rest of the session)
+  const newTurn = JSON.stringify({
+    type: "user",
+    timestamp: "2026-08-02T11:10:00Z",
+    message: { content: [{ type: "text", text: "thanks, now do something else" }] },
+  });
+  writeFileSync(resolvedCopy, readFileSync(bgFixture, "utf8") + newTurn + "\n");
+  assert.equal(pendingBackgroundTasks(resolvedCopy), 0, "previous-turn launch is out of scope");
+  rmSync(resolvedCopy, { force: true });
+}
+// a task-notification CONTINUES the turn (Claude resumes on it) — it must not
+// reset the turn boundary, or a long agent-driven turn undercounts its stats
+// and looks too trivial for a spoken summary
+const bgTurn = readLastTurn(bgFixture, Date.parse("2026-08-02T11:02:10Z"));
+assert.equal(bgTurn.toolCalls, 2, "turn spans the task-notification");
+assert.ok(bgTurn.durationSeconds >= 120, `dur=${bgTurn.durationSeconds} — clock from the human prompt`);
+assert.ok(bgTurn.lastAssistantText.includes("waiting on the agent"));
 
 // terminal row math: wrapped select options must be counted as multiple rows
 // (regression: an option longer than the terminal width left a ghost copy of

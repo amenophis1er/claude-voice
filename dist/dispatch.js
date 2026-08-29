@@ -9,7 +9,7 @@ import { recordMetric } from "./metrics.js";
 import { muted } from "./mute.js";
 import { endSession, projectName, shouldAnnounceProject, touchSession, withProjectPrefix, } from "./announce.js";
 import { clampSpokenLength, extractClosingSentence, extractVoiceMarker, sanitizeForSpeech } from "./sanitize.js";
-import { readLastTurn } from "./transcript.js";
+import { pendingBackgroundTasks, readLastTurn } from "./transcript.js";
 /**
  * Single entry point for every hook. Usage: `node dispatch.ts <event>`
  * where <event> is: stop | notification | prompt-submit | instructions |
@@ -110,9 +110,22 @@ async function main() {
         case "notification": {
             if (silenced(cfg, event))
                 return;
-            if (p.notification_type === "idle_prompt" && throttled(session, IDLE_GRACE_SECONDS)) {
-                logDebug("notification: skipped idle_prompt (summary spoken recently)");
-                return;
+            if (p.notification_type === "idle_prompt") {
+                if (throttled(session, IDLE_GRACE_SECONDS)) {
+                    logDebug("notification: skipped idle_prompt (summary spoken recently)");
+                    return;
+                }
+                // "Claude is waiting for you" while a background agent runs is false:
+                // Claude resumes by itself when the task lands. Skip chime and speech —
+                // nothing here is user-actionable.
+                const pending = typeof p.transcript_path === "string"
+                    ? pendingBackgroundTasks(p.transcript_path)
+                    : undefined;
+                if (pending) {
+                    logDebug(`notification: skipped idle_prompt (${pending} background task(s) pending)`);
+                    recordMetric({ t: "skip", ts: Date.now(), event, reason: "background-pending" });
+                    return;
+                }
             }
             if (policy.chimeOnNotification)
                 detachChime(session, "attention", event);
